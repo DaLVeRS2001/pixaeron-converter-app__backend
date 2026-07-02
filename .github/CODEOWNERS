@@ -1,1 +1,5 @@
+# Default owner for everything
 * @DaLVeRS2001
+
+# Protect GitHub repository configuration
+/.github/ @DaLVeRS2001
