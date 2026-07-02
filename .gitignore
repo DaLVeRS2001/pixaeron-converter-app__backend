@@ -38,8 +38,22 @@ testem.log
 .DS_Store
 Thumbs.db
 
+
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
 .claude/worktrees
 .claude/settings.local.json
+
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+
