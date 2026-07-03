@@ -75,10 +75,10 @@
     "prisma-generate": {
       "command": "prisma generate",
       "options": {
-        "cwd": "{projectRoot}",
-        "input": ["prisma/schema.prisma"]
+        "cwd": "{projectRoot}"
       },
-      "cache": true
+      "cache": true,
+      "inputs": ["{projectRoot}/prisma/schema.prisma"]
     },
     "prisma-migrate-dev": {
       "command": "prisma migrate dev",
@@ -88,6 +88,12 @@
     },
     "prisma-migrate-deploy": {
       "command": "prisma migrate deploy",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-validate": {
+      "command": "prisma validate",
       "options": {
         "cwd": "{projectRoot}"
       }

@@ -8,5 +8,10 @@
  * 🟢 You can import this file directly.
  */
 
-// This file is empty because there are no enums in the schema.
-export {};
+export const PlanCode = {
+  FREE: 'FREE',
+  PRO: 'PRO',
+  TEAM: 'TEAM',
+} as const;
+
+export type PlanCode = (typeof PlanCode)[keyof typeof PlanCode];

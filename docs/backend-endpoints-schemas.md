@@ -40,7 +40,7 @@ type User = {
   id: uuid;
   fullName: string;
   email: email;
-  displayName: nullable<string>;
+  username: nullable<string>;
   avatarUrl: nullable<url>;
   emailVerified: boolean;
   planCode: string;
@@ -52,10 +52,10 @@ type AuthSession = {
   tokens: AuthTokens;
 };
 
-type FileStatus = "pending" | "processing" | "done" | "failed" | "rejected";
-type ProcessingType = "conversion" | "compression";
-type ProcessingMode = "client" | "server";
-type ImageFormat = "png" | "jpg" | "jpeg" | "webp" | "avif" | "svg" | "tiff";
+type FileStatus = 'pending' | 'processing' | 'done' | 'failed' | 'rejected';
+type ProcessingType = 'conversion' | 'compression';
+type ProcessingMode = 'client' | 'server';
+type ImageFormat = 'png' | 'jpg' | 'jpeg' | 'webp' | 'avif' | 'svg' | 'tiff';
 
 type FileAsset = {
   id: uuid;
@@ -143,7 +143,7 @@ Request:
 Response `200`:
 
 ```ts
-AuthSession
+AuthSession;
 ```
 
 ### `POST /auth/google`
@@ -160,7 +160,7 @@ Request:
 Response `200`:
 
 ```ts
-AuthSession
+AuthSession;
 ```
 
 ### `POST /auth/logout`
@@ -189,7 +189,7 @@ Request:
 Response `200`:
 
 ```ts
-AuthTokens
+AuthTokens;
 ```
 
 ### `GET /auth/me`
@@ -419,7 +419,7 @@ Request:
   results: Array<{
     sourceFileName: string;
     sourceFormat: string;
-    targetFormat: "png" | "jpg" | "jpeg" | "webp" | "avif";
+    targetFormat: 'png' | 'jpg' | 'jpeg' | 'webp' | 'avif';
     originalSizeBytes: int;
     finalSizeBytes: int;
     width?: int;
@@ -697,7 +697,7 @@ Response `201`:
 {
   uploadId: uuid;
   uploadUrl: url;
-  method: "PUT";
+  method: 'PUT';
   headers: Record<string, string>;
   expiresAt: isoDate;
 }
@@ -760,14 +760,14 @@ Response `200`:
     fullName: string;
     email: email;
     emailVerified: boolean;
-    displayName: nullable<string>;
+    username: nullable<string>;
     avatarUrl: nullable<url>;
     connectedAccounts: Array<{
-      provider: "google";
+      provider: 'google';
       email: email;
       connected: boolean;
     }>;
-  };
+  }
   preferences: UserPreferences;
   emailPreferences: EmailPreferences;
   usage: UsageSummary;
@@ -782,7 +782,7 @@ Request:
 ```ts
 {
   fullName?: string;
-  displayName?: string;
+  username?: string;
   avatarUploadId?: uuid;
 }
 ```
@@ -800,7 +800,7 @@ Response `200`:
 Request:
 
 ```ts
-UserPreferences
+UserPreferences;
 ```
 
 Response `200`:
@@ -816,7 +816,7 @@ Response `200`:
 Request:
 
 ```ts
-EmailPreferences
+EmailPreferences;
 ```
 
 Response `200`:
@@ -932,4 +932,3 @@ Response `200`:
   message?: string;
 }
 ```
-
