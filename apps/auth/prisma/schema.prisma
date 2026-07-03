@@ -17,9 +17,9 @@ enum PlanCode {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
+  password  String
   username  String
-  avatarUrl String?  @map("avatar_url")
   planCode  PlanCode @default(FREE) @map("plan_code")
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 }

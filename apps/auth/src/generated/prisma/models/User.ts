@@ -37,8 +37,8 @@ export type UserSumAggregateOutputType = {
 export type UserMinAggregateOutputType = {
   id: number | null;
   email: string | null;
+  password: string | null;
   username: string | null;
-  avatarUrl: string | null;
   planCode: $Enums.PlanCode | null;
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -47,8 +47,8 @@ export type UserMinAggregateOutputType = {
 export type UserMaxAggregateOutputType = {
   id: number | null;
   email: string | null;
+  password: string | null;
   username: string | null;
-  avatarUrl: string | null;
   planCode: $Enums.PlanCode | null;
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -57,8 +57,8 @@ export type UserMaxAggregateOutputType = {
 export type UserCountAggregateOutputType = {
   id: number;
   email: number;
+  password: number;
   username: number;
-  avatarUrl: number;
   planCode: number;
   createdAt: number;
   updatedAt: number;
@@ -76,8 +76,8 @@ export type UserSumAggregateInputType = {
 export type UserMinAggregateInputType = {
   id?: true;
   email?: true;
+  password?: true;
   username?: true;
-  avatarUrl?: true;
   planCode?: true;
   createdAt?: true;
   updatedAt?: true;
@@ -86,8 +86,8 @@ export type UserMinAggregateInputType = {
 export type UserMaxAggregateInputType = {
   id?: true;
   email?: true;
+  password?: true;
   username?: true;
-  avatarUrl?: true;
   planCode?: true;
   createdAt?: true;
   updatedAt?: true;
@@ -96,8 +96,8 @@ export type UserMaxAggregateInputType = {
 export type UserCountAggregateInputType = {
   id?: true;
   email?: true;
+  password?: true;
   username?: true;
-  avatarUrl?: true;
   planCode?: true;
   createdAt?: true;
   updatedAt?: true;
@@ -200,8 +200,8 @@ export type UserGroupByArgs<
 export type UserGroupByOutputType = {
   id: number;
   email: string;
+  password: string;
   username: string;
-  avatarUrl: string | null;
   planCode: $Enums.PlanCode;
   createdAt: Date;
   updatedAt: Date;
@@ -231,8 +231,8 @@ export type UserWhereInput = {
   NOT?: Prisma.UserWhereInput | Prisma.UserWhereInput[];
   id?: Prisma.IntFilter<'User'> | number;
   email?: Prisma.StringFilter<'User'> | string;
+  password?: Prisma.StringFilter<'User'> | string;
   username?: Prisma.StringFilter<'User'> | string;
-  avatarUrl?: Prisma.StringNullableFilter<'User'> | string | null;
   planCode?: Prisma.EnumPlanCodeFilter<'User'> | $Enums.PlanCode;
   createdAt?: Prisma.DateTimeFilter<'User'> | Date | string;
   updatedAt?: Prisma.DateTimeFilter<'User'> | Date | string;
@@ -241,8 +241,8 @@ export type UserWhereInput = {
 export type UserOrderByWithRelationInput = {
   id?: Prisma.SortOrder;
   email?: Prisma.SortOrder;
+  password?: Prisma.SortOrder;
   username?: Prisma.SortOrder;
-  avatarUrl?: Prisma.SortOrderInput | Prisma.SortOrder;
   planCode?: Prisma.SortOrder;
   createdAt?: Prisma.SortOrder;
   updatedAt?: Prisma.SortOrder;
@@ -255,8 +255,8 @@ export type UserWhereUniqueInput = Prisma.AtLeast<
     AND?: Prisma.UserWhereInput | Prisma.UserWhereInput[];
     OR?: Prisma.UserWhereInput[];
     NOT?: Prisma.UserWhereInput | Prisma.UserWhereInput[];
+    password?: Prisma.StringFilter<'User'> | string;
     username?: Prisma.StringFilter<'User'> | string;
-    avatarUrl?: Prisma.StringNullableFilter<'User'> | string | null;
     planCode?: Prisma.EnumPlanCodeFilter<'User'> | $Enums.PlanCode;
     createdAt?: Prisma.DateTimeFilter<'User'> | Date | string;
     updatedAt?: Prisma.DateTimeFilter<'User'> | Date | string;
@@ -267,8 +267,8 @@ export type UserWhereUniqueInput = Prisma.AtLeast<
 export type UserOrderByWithAggregationInput = {
   id?: Prisma.SortOrder;
   email?: Prisma.SortOrder;
+  password?: Prisma.SortOrder;
   username?: Prisma.SortOrder;
-  avatarUrl?: Prisma.SortOrderInput | Prisma.SortOrder;
   planCode?: Prisma.SortOrder;
   createdAt?: Prisma.SortOrder;
   updatedAt?: Prisma.SortOrder;
@@ -289,8 +289,8 @@ export type UserScalarWhereWithAggregatesInput = {
     | Prisma.UserScalarWhereWithAggregatesInput[];
   id?: Prisma.IntWithAggregatesFilter<'User'> | number;
   email?: Prisma.StringWithAggregatesFilter<'User'> | string;
+  password?: Prisma.StringWithAggregatesFilter<'User'> | string;
   username?: Prisma.StringWithAggregatesFilter<'User'> | string;
-  avatarUrl?: Prisma.StringNullableWithAggregatesFilter<'User'> | string | null;
   planCode?: Prisma.EnumPlanCodeWithAggregatesFilter<'User'> | $Enums.PlanCode;
   createdAt?: Prisma.DateTimeWithAggregatesFilter<'User'> | Date | string;
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<'User'> | Date | string;
@@ -298,27 +298,27 @@ export type UserScalarWhereWithAggregatesInput = {
 
 export type UserCreateInput = {
   email: string;
+  password: string;
   username: string;
-  avatarUrl?: string | null;
   planCode?: $Enums.PlanCode;
   createdAt?: Date | string;
-  updatedAt: Date | string;
+  updatedAt?: Date | string;
 };
 
 export type UserUncheckedCreateInput = {
   id?: number;
   email: string;
+  password: string;
   username: string;
-  avatarUrl?: string | null;
   planCode?: $Enums.PlanCode;
   createdAt?: Date | string;
-  updatedAt: Date | string;
+  updatedAt?: Date | string;
 };
 
 export type UserUpdateInput = {
   email?: Prisma.StringFieldUpdateOperationsInput | string;
+  password?: Prisma.StringFieldUpdateOperationsInput | string;
   username?: Prisma.StringFieldUpdateOperationsInput | string;
-  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   planCode?: Prisma.EnumPlanCodeFieldUpdateOperationsInput | $Enums.PlanCode;
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -327,8 +327,8 @@ export type UserUpdateInput = {
 export type UserUncheckedUpdateInput = {
   id?: Prisma.IntFieldUpdateOperationsInput | number;
   email?: Prisma.StringFieldUpdateOperationsInput | string;
+  password?: Prisma.StringFieldUpdateOperationsInput | string;
   username?: Prisma.StringFieldUpdateOperationsInput | string;
-  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   planCode?: Prisma.EnumPlanCodeFieldUpdateOperationsInput | $Enums.PlanCode;
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -337,17 +337,17 @@ export type UserUncheckedUpdateInput = {
 export type UserCreateManyInput = {
   id?: number;
   email: string;
+  password: string;
   username: string;
-  avatarUrl?: string | null;
   planCode?: $Enums.PlanCode;
   createdAt?: Date | string;
-  updatedAt: Date | string;
+  updatedAt?: Date | string;
 };
 
 export type UserUpdateManyMutationInput = {
   email?: Prisma.StringFieldUpdateOperationsInput | string;
+  password?: Prisma.StringFieldUpdateOperationsInput | string;
   username?: Prisma.StringFieldUpdateOperationsInput | string;
-  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   planCode?: Prisma.EnumPlanCodeFieldUpdateOperationsInput | $Enums.PlanCode;
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -356,8 +356,8 @@ export type UserUpdateManyMutationInput = {
 export type UserUncheckedUpdateManyInput = {
   id?: Prisma.IntFieldUpdateOperationsInput | number;
   email?: Prisma.StringFieldUpdateOperationsInput | string;
+  password?: Prisma.StringFieldUpdateOperationsInput | string;
   username?: Prisma.StringFieldUpdateOperationsInput | string;
-  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   planCode?: Prisma.EnumPlanCodeFieldUpdateOperationsInput | $Enums.PlanCode;
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -366,8 +366,8 @@ export type UserUncheckedUpdateManyInput = {
 export type UserCountOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   email?: Prisma.SortOrder;
+  password?: Prisma.SortOrder;
   username?: Prisma.SortOrder;
-  avatarUrl?: Prisma.SortOrder;
   planCode?: Prisma.SortOrder;
   createdAt?: Prisma.SortOrder;
   updatedAt?: Prisma.SortOrder;
@@ -380,8 +380,8 @@ export type UserAvgOrderByAggregateInput = {
 export type UserMaxOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   email?: Prisma.SortOrder;
+  password?: Prisma.SortOrder;
   username?: Prisma.SortOrder;
-  avatarUrl?: Prisma.SortOrder;
   planCode?: Prisma.SortOrder;
   createdAt?: Prisma.SortOrder;
   updatedAt?: Prisma.SortOrder;
@@ -390,8 +390,8 @@ export type UserMaxOrderByAggregateInput = {
 export type UserMinOrderByAggregateInput = {
   id?: Prisma.SortOrder;
   email?: Prisma.SortOrder;
+  password?: Prisma.SortOrder;
   username?: Prisma.SortOrder;
-  avatarUrl?: Prisma.SortOrder;
   planCode?: Prisma.SortOrder;
   createdAt?: Prisma.SortOrder;
   updatedAt?: Prisma.SortOrder;
@@ -403,10 +403,6 @@ export type UserSumOrderByAggregateInput = {
 
 export type StringFieldUpdateOperationsInput = {
   set?: string;
-};
-
-export type NullableStringFieldUpdateOperationsInput = {
-  set?: string | null;
 };
 
 export type EnumPlanCodeFieldUpdateOperationsInput = {
@@ -432,8 +428,8 @@ export type UserSelect<
   {
     id?: boolean;
     email?: boolean;
+    password?: boolean;
     username?: boolean;
-    avatarUrl?: boolean;
     planCode?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
@@ -448,8 +444,8 @@ export type UserSelectCreateManyAndReturn<
   {
     id?: boolean;
     email?: boolean;
+    password?: boolean;
     username?: boolean;
-    avatarUrl?: boolean;
     planCode?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
@@ -464,8 +460,8 @@ export type UserSelectUpdateManyAndReturn<
   {
     id?: boolean;
     email?: boolean;
+    password?: boolean;
     username?: boolean;
-    avatarUrl?: boolean;
     planCode?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
@@ -476,8 +472,8 @@ export type UserSelectUpdateManyAndReturn<
 export type UserSelectScalar = {
   id?: boolean;
   email?: boolean;
+  password?: boolean;
   username?: boolean;
-  avatarUrl?: boolean;
   planCode?: boolean;
   createdAt?: boolean;
   updatedAt?: boolean;
@@ -489,8 +485,8 @@ export type UserOmit<
 > = runtime.Types.Extensions.GetOmit<
   | 'id'
   | 'email'
+  | 'password'
   | 'username'
-  | 'avatarUrl'
   | 'planCode'
   | 'createdAt'
   | 'updatedAt',
@@ -507,8 +503,8 @@ export type $UserPayload<
     {
       id: number;
       email: string;
+      password: string;
       username: string;
-      avatarUrl: string | null;
       planCode: $Enums.PlanCode;
       createdAt: Date;
       updatedAt: Date;
@@ -1106,8 +1102,8 @@ export interface Prisma__UserClient<
 export interface UserFieldRefs {
   readonly id: Prisma.FieldRef<'User', 'Int'>;
   readonly email: Prisma.FieldRef<'User', 'String'>;
+  readonly password: Prisma.FieldRef<'User', 'String'>;
   readonly username: Prisma.FieldRef<'User', 'String'>;
-  readonly avatarUrl: Prisma.FieldRef<'User', 'String'>;
   readonly planCode: Prisma.FieldRef<'User', 'PlanCode'>;
   readonly createdAt: Prisma.FieldRef<'User', 'DateTime'>;
   readonly updatedAt: Prisma.FieldRef<'User', 'DateTime'>;

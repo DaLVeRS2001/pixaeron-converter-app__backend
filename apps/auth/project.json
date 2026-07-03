@@ -97,6 +97,12 @@
       "options": {
         "cwd": "{projectRoot}"
       }
+    },
+    "prisma-studio": {
+      "command": "prisma studio",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
     }
   }
 }

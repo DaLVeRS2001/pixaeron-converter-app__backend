@@ -76,8 +76,8 @@ export type TransactionIsolationLevel =
 export const UserScalarFieldEnum = {
   id: 'id',
   email: 'email',
+  password: 'password',
   username: 'username',
-  avatarUrl: 'avatarUrl',
   planCode: 'planCode',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
@@ -99,10 +99,3 @@ export const QueryMode = {
 } as const;
 
 export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode];
-
-export const NullsOrder = {
-  first: 'first',
-  last: 'last',
-} as const;
-
-export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder];
