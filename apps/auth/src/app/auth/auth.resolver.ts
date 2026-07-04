@@ -2,7 +2,7 @@ import { Args, Context, Mutation, Resolver } from '@nestjs/graphql';
 import { User } from '../user/models/user.model';
 import { LoginInput } from './dto/login.input';
 import { AuthService } from './auth.service';
-import { Request, Response } from 'express';
+import { HttpContext } from '@pixaeron/nestjs';
 
 @Resolver()
 export class AuthResolver {
@@ -11,7 +11,7 @@ export class AuthResolver {
   @Mutation(() => User)
   async login(
     @Args('loginInput') loginInput: LoginInput,
-    @Context() context: { req: Request; res: Response },
+    @Context() context: HttpContext,
   ) {
     return this.authService.login(loginInput, context.res);
   }

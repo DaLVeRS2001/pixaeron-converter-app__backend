@@ -1,10 +1,8 @@
-import { Field, ID, ObjectType } from '@nestjs/graphql';
+import { AbstractModel } from '@pixaeron/graphql';
+import { Field, ObjectType } from '@nestjs/graphql';
 
 @ObjectType()
-export class User {
-  @Field(() => ID)
-  id!: number;
-
+export class User extends AbstractModel {
   @Field()
   email!: string;
 

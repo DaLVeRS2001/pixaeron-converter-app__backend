@@ -1,0 +1,16 @@
+{
+  "name": "@pixaeron/auth",
+  "version": "0.0.0",
+  "dependencies": {
+    "@pixaeron/graphql": "0.0.0",
+    "@pixaeron/nestjs": "0.0.0",
+    "passport-jwt": "^4.0.1",
+    "@nestjs/jwt": "^11.0.2",
+    "bcryptjs": "^3.0.3",
+    "@nestjs/passport": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/passport-jwt": "^4.0.1"
+  }
+}

@@ -5,7 +5,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
-import { Request, Response } from 'express';
+import { HttpContext } from '@pixaeron/nestjs';
 
 @Module({
   imports: [
@@ -20,10 +20,7 @@ import { Request, Response } from 'express';
           'request.credentials': 'include',
         },
       },
-      context: ({ req, res }: { req: Request; res: Response }) => ({
-        req,
-        res,
-      }),
+      context: (data: HttpContext) => data,
     }),
     AuthModule,
     PrismaModule,
