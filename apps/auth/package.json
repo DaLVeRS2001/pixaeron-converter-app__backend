@@ -2,8 +2,6 @@
   "name": "@pixaeron/auth",
   "version": "0.0.0",
   "dependencies": {
-    "@pixaeron/graphql": "0.0.0",
-    "@pixaeron/nestjs": "0.0.0",
     "passport-jwt": "^4.0.1",
     "@nestjs/jwt": "^11.0.2",
     "bcryptjs": "^3.0.3",
