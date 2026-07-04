@@ -1,0 +1,1 @@
+1. Create shared type for ({ req, res }: { req: Request; res: Response })
