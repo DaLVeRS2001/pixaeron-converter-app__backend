@@ -17,7 +17,7 @@ export class UserService {
   }
 
   async getUser(args: Prisma.UserWhereUniqueInput) {
-    return this.prisma.user.findUniqueOrThrow({
+    return this.prisma.user.findUnique({
       where: args,
     });
   }

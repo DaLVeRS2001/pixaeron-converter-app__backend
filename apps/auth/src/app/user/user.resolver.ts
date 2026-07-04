@@ -1,19 +1,14 @@
-import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Context, Query, Resolver } from '@pixaeron/graphql';
 import { User } from './models/user.model';
-import { CreateUserInput } from './dto/create-user.inputs';
-import { UserService } from './user.service';
+import { HttpContext } from '@pixaeron/nestjs';
+import { UseGuards } from '@nestjs/common';
+import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 
 @Resolver(() => User)
 export class UserResolver {
-  constructor(private readonly userService: UserService) {}
-
-  @Mutation(() => User)
-  async createUser(@Args('createUserInput') CreateUserInput: CreateUserInput) {
-    return this.userService.createUser(CreateUserInput);
-  }
-
+  @UseGuards(GqlAuthGuard)
   @Query(() => User)
-  async getUser(@Args('id', { type: () => Int }) id: number) {
-    return this.userService.getUser({ id });
+  async me(@Context('req') request: HttpContext['req'] & { user: User }) {
+    return request.user;
   }
 }

@@ -1,5 +1,5 @@
 import { AbstractModel } from '@pixaeron/graphql';
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, ObjectType } from '@pixaeron/graphql';
 
 @ObjectType()
 export class User extends AbstractModel {

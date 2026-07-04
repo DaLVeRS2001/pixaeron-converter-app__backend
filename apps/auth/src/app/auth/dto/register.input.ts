@@ -1,4 +1,4 @@
-import { Field, InputType } from '@nestjs/graphql';
+import { Field, InputType } from '@pixaeron/graphql';
 import {
   IsEmail,
   IsString,
@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 
 @InputType()
-export class CreateUserInput {
+export class RegisterInput {
   @Field()
   @IsString()
   @MinLength(3)
