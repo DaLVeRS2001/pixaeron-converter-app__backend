@@ -3,12 +3,15 @@ import { User } from './models/user.model';
 import { HttpContext } from '@pixaeron/nestjs';
 import { UseGuards } from '@nestjs/common';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
+import { AuthenticatedUser } from './prisma/user.select';
 
 @Resolver(() => User)
 export class UserResolver {
   @UseGuards(GqlAuthGuard)
   @Query(() => User)
-  async me(@Context('req') request: HttpContext['req'] & { user: User }) {
+  async me(
+    @Context('req') request: HttpContext['req'] & { user: AuthenticatedUser },
+  ) {
     return request.user;
   }
 }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { hash } from 'bcryptjs';
 import { Prisma } from '../../generated/prisma/client';
+import { authenticatedUserSelect } from './prisma/user.select';
 
 @Injectable()
 export class UserService {
@@ -19,6 +20,13 @@ export class UserService {
   async getUser(args: Prisma.UserWhereUniqueInput) {
     return this.prisma.user.findUnique({
       where: args,
+    });
+  }
+
+  async getAuthenticatedUser(args: Prisma.UserWhereUniqueInput) {
+    return this.prisma.user.findUnique({
+      where: args,
+      select: authenticatedUserSelect,
     });
   }
 }

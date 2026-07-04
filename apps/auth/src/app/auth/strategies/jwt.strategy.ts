@@ -5,6 +5,7 @@ import type { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { TokenPayload } from '../interfaces/token-payload.interface';
 import { UserService } from '../../user/user.service';
+import { AuthenticatedUser } from '../../user/prisma/user.select';
 
 type JwtRequest = Request & {
   cookies?: { Authentication?: string };
@@ -25,8 +26,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: TokenPayload) {
-    const user = await this.userService.getUser({ id: payload.userId });
+  async validate(payload: TokenPayload): Promise<AuthenticatedUser> {
+    const user = await this.userService.getAuthenticatedUser({
+      id: payload.userId,
+    });
 
     if (!user) throw new UnauthorizedException();
 
