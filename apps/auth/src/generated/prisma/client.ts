@@ -49,3 +49,13 @@ export { Prisma };
  *
  */
 export type User = Prisma.UserModel;
+/**
+ * Model Session
+ *
+ */
+export type Session = Prisma.SessionModel;
+/**
+ * Model SessionEvent
+ *
+ */
+export type SessionEvent = Prisma.SessionEventModel;

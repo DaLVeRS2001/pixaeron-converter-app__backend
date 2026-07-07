@@ -15,3 +15,34 @@ export const PlanCode = {
 } as const;
 
 export type PlanCode = (typeof PlanCode)[keyof typeof PlanCode];
+
+export const SessionRevokedReason = {
+  LOGOUT: 'LOGOUT',
+  LOGOUT_ALL: 'LOGOUT_ALL',
+  REFRESH_REUSE: 'REFRESH_REUSE',
+  PASSWORD_CHANGED: 'PASSWORD_CHANGED',
+  EXPIRED: 'EXPIRED',
+  ADMIN_REVOKED: 'ADMIN_REVOKED',
+  SECURITY_RISK: 'SECURITY_RISK',
+} as const;
+
+export type SessionRevokedReason =
+  (typeof SessionRevokedReason)[keyof typeof SessionRevokedReason];
+
+export const SessionEventType = {
+  LOGIN_SUCCESS: 'LOGIN_SUCCESS',
+  LOGIN_FAILED: 'LOGIN_FAILED',
+  REGISTER_SUCCESS: 'REGISTER_SUCCESS',
+  REFRESH_SUCCESS: 'REFRESH_SUCCESS',
+  REFRESH_FAILED: 'REFRESH_FAILED',
+  REFRESH_REUSE_DETECTED: 'REFRESH_REUSE_DETECTED',
+  LOGOUT: 'LOGOUT',
+  LOGOUT_ALL: 'LOGOUT_ALL',
+  SESSION_EXPIRED: 'SESSION_EXPIRED',
+  PASSWORD_CHANGED: 'PASSWORD_CHANGED',
+  SUSPICIOUS_IP: 'SUSPICIOUS_IP',
+  SUSPICIOUS_USER_AGENT: 'SUSPICIOUS_USER_AGENT',
+} as const;
+
+export type SessionEventType =
+  (typeof SessionEventType)[keyof typeof SessionEventType];

@@ -1,6 +1,8 @@
 import { Field, InputType } from '@pixaeron/graphql';
 import {
+  IsBoolean,
   IsEmail,
+  IsOptional,
   IsString,
   IsStrongPassword,
   MaxLength,
@@ -22,4 +24,9 @@ export class RegisterInput {
   @Field()
   @IsStrongPassword()
   password!: string;
+
+  @Field(() => Boolean, { nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
 }

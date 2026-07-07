@@ -3,36 +3,58 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 
+import { SessionEventType } from '../../generated/prisma/client';
+import { SessionAuditService } from '../session/audit/session-audit.service';
+import { SessionService } from '../session/services/session.service';
 import { UserService } from '../user/user.service';
 import { LoginInput } from './dto/login.input';
 import { RegisterInput } from './dto/register.input';
-import { TokenPayload } from './interfaces/token-payload.interface';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
-    private readonly configService: ConfigService,
-    private readonly jwtService: JwtService,
+    private readonly sessionService: SessionService,
+    private readonly sessionAuditService: SessionAuditService,
   ) {}
 
   private readonly invalidCredentialsMessage = 'Invalid email or password';
 
-  async login({ email, password }: LoginInput, response: Response) {
-    const user = await this.verifyUser(email, password);
+  async login(
+    { email, password, rememberMe = false }: LoginInput,
+    request: Request,
+    response: Response,
+  ) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.userService.getUser({ email: normalizedEmail });
 
-    this.setAuthenticationCookie(user.id, response);
+    if (!user) {
+      await this.logFailedLogin(request);
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
+    }
 
-    return user;
+    const isPasswordValid = await compare(password, user.password);
+
+    if (!isPasswordValid) {
+      await this.logFailedLogin(request, user.id);
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
+    }
+
+    return this.sessionService.createSession(
+      user.id,
+      request,
+      response,
+      SessionEventType.LOGIN_SUCCESS,
+      rememberMe,
+    );
   }
 
   async register(
-    { email, password, username }: RegisterInput,
+    { email, password, username, rememberMe = false }: RegisterInput,
+    request: Request,
     response: Response,
   ) {
     const normalizedEmail = email.trim().toLowerCase();
@@ -49,41 +71,24 @@ export class AuthService {
       password,
     });
 
-    this.setAuthenticationCookie(user.id, response);
-
-    return user;
+    return this.sessionService.createSession(
+      user.id,
+      request,
+      response,
+      SessionEventType.REGISTER_SUCCESS,
+      rememberMe,
+    );
   }
 
-  private async verifyUser(email: string, password: string) {
-    const normalizedEmail = email.trim().toLowerCase();
-
-    const user = await this.userService.getUser({
-      email: normalizedEmail,
-    });
-
-    if (!user) throw new UnauthorizedException(this.invalidCredentialsMessage);
-
-    const isPasswordValid = await compare(password, user.password);
-
-    if (!isPasswordValid)
-      throw new UnauthorizedException(this.invalidCredentialsMessage);
-
-    return user;
+  async logout(request: Request, response: Response) {
+    return this.sessionService.logout(request, response);
   }
 
-  private setAuthenticationCookie(userId: number, response: Response) {
-    const tokenPayload: TokenPayload = {
-      userId,
-    };
+  async logoutAll(userId: number, request: Request, response: Response) {
+    return this.sessionService.logoutAll(userId, request, response);
+  }
 
-    const accessToken = this.jwtService.sign(tokenPayload);
-
-    response.cookie('Authentication', accessToken, {
-      httpOnly: true,
-      secure: this.configService.get('NODE_ENV') === 'production',
-      path: '/',
-      sameSite: 'lax',
-      maxAge: Number(this.configService.getOrThrow('JWT_EXPIRATION_MS')),
-    });
+  private async logFailedLogin(request: Request, userId?: number) {
+    await this.sessionAuditService.recordLoginFailed(request, userId);
   }
 }

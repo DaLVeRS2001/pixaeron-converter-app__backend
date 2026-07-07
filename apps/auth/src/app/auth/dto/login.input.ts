@@ -1,5 +1,5 @@
 import { Field, InputType } from '@pixaeron/graphql';
-import { IsNotEmpty } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional } from 'class-validator';
 
 @InputType()
 export class LoginInput {
@@ -10,4 +10,9 @@ export class LoginInput {
   @Field()
   @IsNotEmpty()
   password!: string;
+
+  @Field(() => Boolean, { nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
 }

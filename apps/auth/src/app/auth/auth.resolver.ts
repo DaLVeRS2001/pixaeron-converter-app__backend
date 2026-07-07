@@ -1,10 +1,13 @@
 import { UseGuards } from '@nestjs/common';
-import { HttpContext } from '@pixaeron/nestjs';
 import { Args, Context, Mutation, Resolver } from '@pixaeron/graphql';
+import { HttpContext } from '@pixaeron/nestjs';
+
 import { User } from '../user/models/user.model';
+import { AuthenticatedUser } from '../user/prisma/user.select';
 import { AuthService } from './auth.service';
 import { LoginInput } from './dto/login.input';
 import { RegisterInput } from './dto/register.input';
+import { GqlAuthGuard } from './guards/gql-auth.guard';
 
 @Resolver()
 export class AuthResolver {
@@ -15,7 +18,7 @@ export class AuthResolver {
     @Args('loginInput') loginInput: LoginInput,
     @Context() context: HttpContext,
   ) {
-    return this.authService.login(loginInput, context.res);
+    return this.authService.login(loginInput, context.req, context.res);
   }
 
   @Mutation(() => User)
@@ -23,6 +26,20 @@ export class AuthResolver {
     @Args('registerInput') registerInput: RegisterInput,
     @Context() context: HttpContext,
   ) {
-    return this.authService.register(registerInput, context.res);
+    return this.authService.register(registerInput, context.req, context.res);
+  }
+
+  @Mutation(() => Boolean)
+  async logout(@Context() context: HttpContext) {
+    return this.authService.logout(context.req, context.res);
+  }
+
+  @UseGuards(GqlAuthGuard)
+  @Mutation(() => Boolean)
+  async logoutAll(
+    @Context('req') request: HttpContext['req'] & { user: AuthenticatedUser },
+    @Context('res') response: HttpContext['res'],
+  ) {
+    return this.authService.logoutAll(request.user.id, request, response);
   }
 }

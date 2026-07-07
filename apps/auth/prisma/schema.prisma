@@ -14,12 +14,83 @@ enum PlanCode {
   TEAM
 }
 
+enum SessionRevokedReason {
+  LOGOUT
+  LOGOUT_ALL
+  REFRESH_REUSE
+  PASSWORD_CHANGED
+  EXPIRED
+  ADMIN_REVOKED
+  SECURITY_RISK
+}
+
+enum SessionEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  REGISTER_SUCCESS
+  REFRESH_SUCCESS
+  REFRESH_FAILED
+  REFRESH_REUSE_DETECTED
+  LOGOUT
+  LOGOUT_ALL
+  SESSION_EXPIRED
+  PASSWORD_CHANGED
+  SUSPICIOUS_IP
+  SUSPICIOUS_USER_AGENT
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  username  String
-  planCode  PlanCode @default(FREE) @map("plan_code")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  username      String
+  planCode      PlanCode       @default(FREE) @map("plan_code")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  sessions      Session[]
+  sessionEvents SessionEvent[]
+}
+
+model Session {
+  id               String                @id @default(uuid())
+  userId           Int                   @map("user_id")
+  refreshTokenHash String                @map("refresh_token_hash")
+  expiresAt        DateTime              @map("expires_at")
+  revokedAt        DateTime?             @map("revoked_at")
+  revokedReason    SessionRevokedReason? @map("revoked_reason")
+  lastUsedAt       DateTime?             @map("last_used_at")
+  rotatedAt        DateTime?             @map("rotated_at")
+  rememberMe       Boolean               @default(false) @map("remember_me")
+  userAgent        String?               @map("user_agent")
+  ipHash           String?               @map("ip_hash")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events SessionEvent[]
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("sessions")
+}
+
+model SessionEvent {
+  id        String           @id @default(uuid())
+  sessionId String?          @map("session_id")
+  userId    Int?             @map("user_id")
+  type      SessionEventType
+  ipHash    String?          @map("ip_hash")
+  userAgent String?          @map("user_agent")
+  metadata  Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("session_events")
 }
