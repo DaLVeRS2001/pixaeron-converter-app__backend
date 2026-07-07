@@ -12,7 +12,7 @@ export class UserService {
     return this.prisma.user.create({
       data: {
         ...data,
-        password: await hash(data.password, 10),
+        password: data.password ? await hash(data.password, 10) : null,
       },
     });
   }

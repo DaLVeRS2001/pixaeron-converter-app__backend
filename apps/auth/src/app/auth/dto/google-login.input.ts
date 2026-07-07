@@ -2,14 +2,11 @@ import { Field, InputType } from '@pixaeron/graphql';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 @InputType()
-export class LoginInput {
+export class GoogleLoginInput {
   @Field()
   @IsNotEmpty()
-  email!: string;
-
-  @Field()
-  @IsNotEmpty()
-  password!: string;
+  @IsString()
+  idToken!: string;
 
   @Field(() => Boolean, { nullable: true })
   @IsOptional()

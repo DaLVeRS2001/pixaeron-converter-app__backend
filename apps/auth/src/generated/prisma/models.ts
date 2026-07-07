@@ -8,6 +8,7 @@
  * 🟢 You can import this file directly.
  */
 export type * from './models/User.js';
+export type * from './models/Account.js';
 export type * from './models/Session.js';
 export type * from './models/SessionEvent.js';
 export type * from './commonInputTypes.js';

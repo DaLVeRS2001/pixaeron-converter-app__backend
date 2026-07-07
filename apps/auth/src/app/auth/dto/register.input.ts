@@ -29,4 +29,9 @@ export class RegisterInput {
   @IsOptional()
   @IsBoolean()
   rememberMe?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  captchaToken?: string;
 }

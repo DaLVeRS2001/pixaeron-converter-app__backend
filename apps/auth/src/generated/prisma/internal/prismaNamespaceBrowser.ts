@@ -55,6 +55,7 @@ export const AnyNull = runtime.AnyNull;
 
 export const ModelName = {
   User: 'User',
+  Account: 'Account',
   Session: 'Session',
   SessionEvent: 'SessionEvent',
 } as const;
@@ -80,6 +81,7 @@ export const UserScalarFieldEnum = {
   email: 'email',
   password: 'password',
   username: 'username',
+  emailVerified: 'emailVerified',
   planCode: 'planCode',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
@@ -87,6 +89,18 @@ export const UserScalarFieldEnum = {
 
 export type UserScalarFieldEnum =
   (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum];
+
+export const AccountScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  provider: 'provider',
+  providerAccountId: 'providerAccountId',
+  email: 'email',
+  createdAt: 'createdAt',
+} as const;
+
+export type AccountScalarFieldEnum =
+  (typeof AccountScalarFieldEnum)[keyof typeof AccountScalarFieldEnum];
 
 export const SessionScalarFieldEnum = {
   id: 'id',

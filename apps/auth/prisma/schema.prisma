@@ -42,13 +42,30 @@ enum SessionEventType {
 model User {
   id            Int            @id @default(autoincrement())
   email         String         @unique
-  password      String
+  password      String?
   username      String
+  emailVerified Boolean        @default(false) @map("email_verified")
   planCode      PlanCode       @default(FREE) @map("plan_code")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
+  accounts      Account[]
   sessions      Session[]
   sessionEvents SessionEvent[]
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  userId            Int      @map("user_id")
+  provider          String
+  providerAccountId String   @map("provider_account_id")
+  email             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
 }
 
 model Session {

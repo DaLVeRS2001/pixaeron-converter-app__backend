@@ -5,6 +5,7 @@ import { HttpContext } from '@pixaeron/nestjs';
 import { User } from '../user/models/user.model';
 import { AuthenticatedUser } from '../user/prisma/user.select';
 import { AuthService } from './auth.service';
+import { GoogleLoginInput } from './dto/google-login.input';
 import { LoginInput } from './dto/login.input';
 import { RegisterInput } from './dto/register.input';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
@@ -27,6 +28,18 @@ export class AuthResolver {
     @Context() context: HttpContext,
   ) {
     return this.authService.register(registerInput, context.req, context.res);
+  }
+
+  @Mutation(() => User)
+  async googleLogin(
+    @Args('googleLoginInput') googleLoginInput: GoogleLoginInput,
+    @Context() context: HttpContext,
+  ) {
+    return this.authService.googleLogin(
+      googleLoginInput,
+      context.req,
+      context.res,
+    );
   }
 
   @Mutation(() => Boolean)

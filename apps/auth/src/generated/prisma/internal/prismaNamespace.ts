@@ -413,6 +413,7 @@ type FieldRefInputType<Model, FieldType> = Model extends never
 
 export const ModelName = {
   User: 'User',
+  Account: 'Account',
   Session: 'Session',
   SessionEvent: 'SessionEvent',
 } as const;
@@ -436,7 +437,7 @@ export type TypeMap<
     omit: GlobalOmitOptions;
   };
   meta: {
-    modelProps: 'user' | 'session' | 'sessionEvent';
+    modelProps: 'user' | 'account' | 'session' | 'sessionEvent';
     txIsolationLevel: TransactionIsolationLevel;
   };
   model: {
@@ -512,6 +513,82 @@ export type TypeMap<
           args: Prisma.UserCountArgs<ExtArgs>;
           result:
             | runtime.Types.Utils.Optional<Prisma.UserCountAggregateOutputType>
+            | number;
+        };
+      };
+    };
+    Account: {
+      payload: Prisma.$AccountPayload<ExtArgs>;
+      fields: Prisma.AccountFieldRefs;
+      operations: {
+        findUnique: {
+          args: Prisma.AccountFindUniqueArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload> | null;
+        };
+        findUniqueOrThrow: {
+          args: Prisma.AccountFindUniqueOrThrowArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>;
+        };
+        findFirst: {
+          args: Prisma.AccountFindFirstArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload> | null;
+        };
+        findFirstOrThrow: {
+          args: Prisma.AccountFindFirstOrThrowArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>;
+        };
+        findMany: {
+          args: Prisma.AccountFindManyArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>[];
+        };
+        create: {
+          args: Prisma.AccountCreateArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>;
+        };
+        createMany: {
+          args: Prisma.AccountCreateManyArgs<ExtArgs>;
+          result: BatchPayload;
+        };
+        createManyAndReturn: {
+          args: Prisma.AccountCreateManyAndReturnArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>[];
+        };
+        delete: {
+          args: Prisma.AccountDeleteArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>;
+        };
+        update: {
+          args: Prisma.AccountUpdateArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>;
+        };
+        deleteMany: {
+          args: Prisma.AccountDeleteManyArgs<ExtArgs>;
+          result: BatchPayload;
+        };
+        updateMany: {
+          args: Prisma.AccountUpdateManyArgs<ExtArgs>;
+          result: BatchPayload;
+        };
+        updateManyAndReturn: {
+          args: Prisma.AccountUpdateManyAndReturnArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>[];
+        };
+        upsert: {
+          args: Prisma.AccountUpsertArgs<ExtArgs>;
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$AccountPayload>;
+        };
+        aggregate: {
+          args: Prisma.AccountAggregateArgs<ExtArgs>;
+          result: runtime.Types.Utils.Optional<Prisma.AggregateAccount>;
+        };
+        groupBy: {
+          args: Prisma.AccountGroupByArgs<ExtArgs>;
+          result: runtime.Types.Utils.Optional<Prisma.AccountGroupByOutputType>[];
+        };
+        count: {
+          args: Prisma.AccountCountArgs<ExtArgs>;
+          result:
+            | runtime.Types.Utils.Optional<Prisma.AccountCountAggregateOutputType>
             | number;
         };
       };
@@ -712,6 +789,7 @@ export const UserScalarFieldEnum = {
   email: 'email',
   password: 'password',
   username: 'username',
+  emailVerified: 'emailVerified',
   planCode: 'planCode',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
@@ -719,6 +797,18 @@ export const UserScalarFieldEnum = {
 
 export type UserScalarFieldEnum =
   (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum];
+
+export const AccountScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  provider: 'provider',
+  providerAccountId: 'providerAccountId',
+  email: 'email',
+  createdAt: 'createdAt',
+} as const;
+
+export type AccountScalarFieldEnum =
+  (typeof AccountScalarFieldEnum)[keyof typeof AccountScalarFieldEnum];
 
 export const SessionScalarFieldEnum = {
   id: 'id',
@@ -828,6 +918,14 @@ export type ListStringFieldRefInput<$PrismaModel> = FieldRefInputType<
 >;
 
 /**
+ * Reference to a field of type 'Boolean'
+ */
+export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<
+  $PrismaModel,
+  'Boolean'
+>;
+
+/**
  * Reference to a field of type 'PlanCode'
  */
 export type EnumPlanCodeFieldRefInput<$PrismaModel> = FieldRefInputType<
@@ -870,14 +968,6 @@ export type EnumSessionRevokedReasonFieldRefInput<$PrismaModel> =
  */
 export type ListEnumSessionRevokedReasonFieldRefInput<$PrismaModel> =
   FieldRefInputType<$PrismaModel, 'SessionRevokedReason[]'>;
-
-/**
- * Reference to a field of type 'Boolean'
- */
-export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<
-  $PrismaModel,
-  'Boolean'
->;
 
 /**
  * Reference to a field of type 'SessionEventType'
@@ -1044,6 +1134,7 @@ export type PrismaClientOptions = (
 };
 export type GlobalOmitConfig = {
   user?: Prisma.UserOmit;
+  account?: Prisma.AccountOmit;
   session?: Prisma.SessionOmit;
   sessionEvent?: Prisma.SessionEventOmit;
 };

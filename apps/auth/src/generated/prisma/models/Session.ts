@@ -750,14 +750,6 @@ export type NullableEnumSessionRevokedReasonFieldUpdateOperationsInput = {
   set?: $Enums.SessionRevokedReason | null;
 };
 
-export type BoolFieldUpdateOperationsInput = {
-  set?: boolean;
-};
-
-export type NullableStringFieldUpdateOperationsInput = {
-  set?: string | null;
-};
-
 export type SessionCreateNestedOneWithoutEventsInput = {
   create?: Prisma.XOR<
     Prisma.SessionCreateWithoutEventsInput,
