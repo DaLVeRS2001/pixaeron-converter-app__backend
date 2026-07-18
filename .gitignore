@@ -2,6 +2,7 @@
 
 # compiled output
 dist
+.nx
 tmp
 out-tsc
 
@@ -52,5 +53,11 @@ Thumbs.db
 !.env.example
 
 
+
 # VS Code
 .vscode/
+
+# Deployment generated files
+.ci/
+runtime.env
+deployment.env

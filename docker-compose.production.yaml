@@ -1,0 +1,33 @@
+name: pixaeron
+
+services:
+  auth:
+    image: ghcr.io/dalvers2001/pixaeron-auth:${AUTH_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ${AUTH_RUNTIME_ENV_FILE:-/opt/pixaeron/auth.env}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - ${PIXAERON_CERTS_DIR:-/opt/pixaeron/certs}/global-bundle.pem:/app/certs/global-bundle.pem:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3000/auth/health').then((response) => {
+            if (!response.ok) process.exit(1);
+          }).catch(() => process.exit(1));
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'

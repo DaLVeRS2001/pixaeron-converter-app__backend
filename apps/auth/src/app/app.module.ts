@@ -8,6 +8,7 @@ import { SessionModule } from './session/session.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { HttpContext } from '@pixaeron/nestjs';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -17,20 +18,23 @@ import { HttpContext } from '@pixaeron/nestjs';
     SessionModule,
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      graphiql: true,
+      graphiql: process.env.NODE_ENV !== 'production',
       autoSchemaFile: true,
       path: 'auth',
-      playground: {
-        settings: {
-          'request.credentials': 'include',
-        },
-      },
+      playground:
+        process.env.NODE_ENV !== 'production'
+          ? {
+              settings: {
+                'request.credentials': 'include',
+              },
+            }
+          : false,
       context: (data: HttpContext) => data,
     }),
     AuthModule,
     UserModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [],
 })
 export class AppModule {}

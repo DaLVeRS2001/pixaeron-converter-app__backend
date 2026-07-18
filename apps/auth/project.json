@@ -78,7 +78,12 @@
         "cwd": "{projectRoot}"
       },
       "cache": true,
-      "inputs": ["{projectRoot}/prisma/schema.prisma"]
+      "inputs": [
+        "{projectRoot}/prisma/schema.prisma",
+        "{projectRoot}/prisma.config.ts",
+        "{workspaceRoot}/package-lock.json"
+      ],
+      "outputs": ["{projectRoot}/src/generated/prisma"]
     },
     "prisma-migrate-dev": {
       "command": "prisma migrate dev",

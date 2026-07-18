@@ -7,7 +7,16 @@ export async function init(app: INestApplication, globalPrefix = 'api') {
   const trustProxy = configService.get<string>('TRUST_PROXY');
 
   if (trustProxy) {
-    app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
+    const normalizedTrustProxy = trustProxy.trim();
+    const trustProxyValue = /^\d+$/.test(normalizedTrustProxy)
+      ? Number(normalizedTrustProxy)
+      : normalizedTrustProxy === 'true'
+        ? true
+        : normalizedTrustProxy === 'false'
+          ? false
+          : normalizedTrustProxy;
+
+    app.getHttpAdapter().getInstance().set('trust proxy', trustProxyValue);
   }
 
   app.useGlobalPipes(

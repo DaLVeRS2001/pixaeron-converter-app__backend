@@ -1,41 +1,308 @@
-name: CI
+name: CI/CD
 
 on:
   push:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Deploy service project name or all'
+        required: true
+        default: all
+        type: string
 
 permissions:
   actions: read
   contents: read
 
 jobs:
-  main:
+  verify:
+    name: Verify projects
     runs-on: ubuntu-latest
+    outputs:
+      deploy_matrix: ${{ steps.deploy_matrix.outputs.matrix }}
+      has_deployments: ${{ steps.deploy_matrix.outputs.has_deployments }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          filter: tree:0
           fetch-depth: 0
 
-      # This enables task distribution via Nx Cloud
-      # Run this command as early as possible, before dependencies are installed
-      # Learn more at https://nx.dev/ci/reference/nx-cloud-cli#npx-nxcloud-startcirun
-      # Connect your workspace by running "nx connect" and uncomment this line to enable task distribution
-      # - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="build"
+      - name: Validate deployment manifest
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      # Cache node_modules
-      - uses: actions/setup-node@v4
+          jq -e '
+            type == "array" and
+            length > 0 and
+            all(.[];
+              (.project | type) == "string" and
+              (.imageName | type) == "string" and
+              (.dockerfile | type) == "string" and
+              (.composeService | type) == "string" and
+              (.imageTagEnv | type) == "string" and
+              (.runtimeEnvSecret | type) == "string" and
+              (.runtimeEnvFileEnv | type) == "string" and
+              (.migrationCommand | type) == "string"
+            ) and
+            ([.[].project] | length) == ([.[].project] | unique | length) and
+            ([.[].composeService] | length) == ([.[].composeService] | unique | length) and
+            ([.[].imageTagEnv] | length) == ([.[].imageTagEnv] | unique | length) and
+            ([.[].runtimeEnvFileEnv] | length) == ([.[].runtimeEnvFileEnv] | unique | length)
+          ' .github/deploy-services.json > /dev/null
+
+          while IFS= read -r dockerfile; do
+            [[ -f "$dockerfile" ]] || {
+              echo "Dockerfile not found: $dockerfile" >&2
+              exit 1
+            }
+          done < <(jq -r '.[].dockerfile' .github/deploy-services.json)
+
+      - name: Validate Compose configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p .ci/certs
+          : > .ci/runtime.env
+          : > .ci/certs/global-bundle.pem
+
+          jq -r --arg runtime_env "$PWD/.ci/runtime.env" \
+            '.[] | .imageTagEnv + "=validation", .runtimeEnvFileEnv + "=" + $runtime_env' \
+            .github/deploy-services.json > .ci/deployment.env
+
+          compose_services="$(
+            PIXAERON_CERTS_DIR="$PWD/.ci/certs" \
+            docker compose --env-file .ci/deployment.env \
+              -f docker-compose.production.yaml \
+              config --services
+          )"
+
+          while IFS= read -r service; do
+            grep -Fxq "$service" <<< "$compose_services" || {
+              echo "Compose service not found: $service" >&2
+              exit 1
+            }
+          done < <(jq -r '.[].composeService' .github/deploy-services.json)
+
+      - name: Set affected base and head SHAs
+        if: github.event_name != 'workflow_dispatch'
+        uses: nrwl/nx-set-shas@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      # Prepend any command with "nx record --" to record its logs to Nx Cloud
-      # - run: npx nx record -- echo Hello World
-      - run: npx nx run-many -t lint test build
-      # Nx Cloud recommends fixes for failures to help you get CI green faster. Learn more: https://nx.dev/ci/features/self-healing-ci
-      - run: npx nx fix-ci
-        if: always()
+      - name: Lint, test, and build affected projects
+        if: github.event_name != 'workflow_dispatch'
+        run: npx nx affected -t lint test build
+
+      - name: Verify selected deployable projects
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SERVICE_INPUT: ${{ inputs.service }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$SERVICE_INPUT" == "all" ]]; then
+            projects="$(jq -r '.[].project' .github/deploy-services.json | paste -sd, -)"
+          else
+            jq -e --arg project "$SERVICE_INPUT" \
+              'any(.[]; .project == $project)' \
+              .github/deploy-services.json > /dev/null
+            projects="$SERVICE_INPUT"
+          fi
+
+          npx nx run-many -t lint test build --projects="$projects"
+
+      - name: Build deployment matrix
+        id: deploy_matrix
+        env:
+          SERVICE_INPUT: ${{ inputs.service || 'all' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          workspace_projects="$(npx nx show projects --json)"
+          jq -e --argjson workspace_projects "$workspace_projects" '
+            all(.[];
+              .project as $project |
+              ($workspace_projects | index($project)) != null
+            )
+          ' .github/deploy-services.json > /dev/null || {
+            echo 'Deployment manifest contains an unknown Nx project.' >&2
+            exit 1
+          }
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            selected='[]'
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$SERVICE_INPUT" == "all" ]]; then
+              selected="$(jq -c '.' .github/deploy-services.json)"
+            else
+              selected="$(jq -c --arg project "$SERVICE_INPUT" \
+                '[.[] | select(.project == $project)]' \
+                .github/deploy-services.json)"
+            fi
+          else
+            affected="$(npx nx show projects --affected --json)"
+            selected="$(jq -c --argjson affected "$affected" \
+              '[.[] | select(.project as $project | ($affected | index($project)))]' \
+              .github/deploy-services.json)"
+          fi
+
+          matrix="$(jq -cn --argjson include "$selected" '{include: $include}')"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+          if jq -e 'length > 0' <<< "$selected" > /dev/null; then
+            echo "has_deployments=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_deployments=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    name: Deploy ${{ matrix.project }}
+    needs: verify
+    if: >-
+      needs.verify.result == 'success' &&
+      needs.verify.outputs.has_deployments == 'true' &&
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: pixaeron-production
+      cancel-in-progress: false
+      queue: max
+
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.verify.outputs.deploy_matrix) }}
+
+    env:
+      IMAGE_TAG: sha-${{ github.sha }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Generate runtime env file
+        env:
+          RUNTIME_ENV_SECRET_NAME: ${{ matrix.runtimeEnvSecret }}
+          SERVICE_RUNTIME_ENV: ${{ secrets[matrix.runtimeEnvSecret] }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SERVICE_RUNTIME_ENV" ]]; then
+            echo "$RUNTIME_ENV_SECRET_NAME GitHub Environment secret is empty." >&2
+            exit 1
+          fi
+
+          umask 077
+          printf '%s\n' "$SERVICE_RUNTIME_ENV" > service.env
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ matrix.imageName }}:${{ env.IMAGE_TAG }}
+            ${{ matrix.imageName }}:latest
+          cache-from: type=gha,scope=${{ matrix.project }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          umask 077
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Upload deployment files
+        env:
+          COMPOSE_SERVICE: ${{ matrix.composeService }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            'install -d -m 755 /opt/pixaeron'
+
+          scp -o BatchMode=yes \
+            docker-compose.production.yaml \
+            "$VPS_USER@$VPS_HOST:/opt/pixaeron/docker-compose.production.yaml.next"
+
+          scp -p -o BatchMode=yes \
+            service.env \
+            "$VPS_USER@$VPS_HOST:/opt/pixaeron/$COMPOSE_SERVICE.env.next"
+
+          scp -o BatchMode=yes \
+            scripts/deploy-service.sh \
+            "$VPS_USER@$VPS_HOST:/opt/pixaeron/deploy-service.sh"
+
+      - name: Log in to GHCR on VPS
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          printf '%s' "$GHCR_TOKEN" | ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+      - name: Deploy service on VPS
+        env:
+          COMPOSE_SERVICE: ${{ matrix.composeService }}
+          IMAGE_TAG_ENV: ${{ matrix.imageTagEnv }}
+          MIGRATION_COMMAND: ${{ matrix.migrationCommand }}
+          RUNTIME_ENV_FILE_ENV: ${{ matrix.runtimeEnvFileEnv }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          printf -v remote_command '%q ' \
+            bash /opt/pixaeron/deploy-service.sh \
+            "$COMPOSE_SERVICE" \
+            "$IMAGE_TAG_ENV" \
+            "$IMAGE_TAG" \
+            "$RUNTIME_ENV_FILE_ENV" \
+            "$MIGRATION_COMMAND"
+
+          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" "$remote_command"
