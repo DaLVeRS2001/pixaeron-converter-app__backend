@@ -2,6 +2,7 @@
 
 # compiled output
 dist
+.nx
 tmp
 out-tsc
 
@@ -37,8 +38,9 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
+docs
 
-
+/workspace-data/
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
@@ -52,5 +54,14 @@ Thumbs.db
 !.env.example
 
 
+
 # VS Code
 .vscode/
+
+# Deployment generated files
+.ci/
+runtime.env
+deployment.env
+/infra/ansible/inventory.yml
+/apps/**/src/generated/
+

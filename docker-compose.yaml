@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pixaeron_auth
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres18_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d pixaeron_auth']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth:
+    build:
+      context: .
+      dockerfile: apps/auth/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - apps/auth/.env
+    environment:
+      NODE_ENV: development
+    command: >-
+      sh -c "./node_modules/.bin/prisma migrate deploy
+      --config apps/auth/prisma.config.ts && node main.js"
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres18_data:

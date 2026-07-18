@@ -13,7 +13,14 @@
       "!{projectRoot}/src/test-setup.[jt]s",
       "!{projectRoot}/test-setup.[jt]s"
     ],
-    "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
+    "sharedGlobals": [
+      "{workspaceRoot}/.github/deploy-services.json",
+      "{workspaceRoot}/.github/workflows/ci.yml",
+      "{workspaceRoot}/docker-compose.production.yaml",
+      "{workspaceRoot}/.dockerignore",
+      "{workspaceRoot}/scripts/deploy-service.sh",
+      "{workspaceRoot}/webpack.app.config.js"
+    ]
   },
   "plugins": [
     {

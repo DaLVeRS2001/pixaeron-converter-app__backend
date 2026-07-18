@@ -1,0 +1,12 @@
+[
+  {
+    "project": "auth",
+    "imageName": "ghcr.io/dalvers2001/pixaeron-auth",
+    "dockerfile": "apps/auth/Dockerfile",
+    "composeService": "auth",
+    "imageTagEnv": "AUTH_IMAGE_TAG",
+    "runtimeEnvSecret": "AUTH_RUNTIME_ENV",
+    "runtimeEnvFileEnv": "AUTH_RUNTIME_ENV_FILE",
+    "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/auth/prisma.config.ts"
+  }
+]

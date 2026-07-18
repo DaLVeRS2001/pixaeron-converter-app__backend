@@ -1,0 +1,23 @@
+.git
+.github
+.nx
+.vscode
+
+node_modules
+dist
+coverage
+tmp
+*.log
+
+.env
+.env.*
+!.env.example
+
+docs
+docker-compose*.yaml
+
+# CI/deployment generated files
+.ci
+runtime.env
+service.env
+deployment.env

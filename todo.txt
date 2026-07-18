@@ -1,0 +1,50 @@
+1. Refresh session / audit trail
+
+2. trust proxy
+
+3. Google auth
+
+4. Captcha
+
+5. Auth Rate Limit Service
+
+
+
+Global: redis cooldown
+Remove refresh if it's possible
+throughput replicas test
+
+
+Lightsail Application VPS — $24/month
+├── Nginx/Caddy
+├── auth
+├── API
+├── Redis
+├── Pulsar producer
+└── one persistent cpu-limited worker
+
+Lightsail Database VPS — $20/month
+└── PostgreSQL
+
+EC2 Auto Scaling Group
+├── min: 0
+├── desired: 0
+└── max: 5
+
+
+// Monitoring
+
+database-vps
+├── PostgreSQL
+├── node_exporter
+└── postgres_exporter
+
+application-vps
+├── Docker containers
+├── node_exporter
+└── cAdvisor
+
+Monitoring
+├── Prometheus
+├── Grafana
+└── Alertmanager

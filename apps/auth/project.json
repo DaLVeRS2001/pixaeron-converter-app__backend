@@ -6,6 +6,7 @@
   "tags": [],
   "targets": {
     "build": {
+      "dependsOn": ["prisma-generate", "^build"],
       "executor": "nx:run-commands",
       "options": {
         "command": "webpack-cli build",
@@ -23,9 +24,7 @@
       }
     },
     "prune-lockfile": {
-      "dependsOn": [
-        "build"
-      ],
+      "dependsOn": ["build"],
       "cache": true,
       "executor": "@nx/js:prune-lockfile",
       "outputs": [
@@ -37,32 +36,23 @@
       }
     },
     "copy-workspace-modules": {
-      "dependsOn": [
-        "build"
-      ],
+      "dependsOn": ["build"],
       "cache": true,
-      "outputs": [
-        "{workspaceRoot}/dist/apps/auth/workspace_modules"
-      ],
+      "outputs": ["{workspaceRoot}/dist/apps/auth/workspace_modules"],
       "executor": "@nx/js:copy-workspace-modules",
       "options": {
         "buildTarget": "build"
       }
     },
     "prune": {
-      "dependsOn": [
-        "prune-lockfile",
-        "copy-workspace-modules"
-      ],
+      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
       "executor": "nx:noop"
     },
     "serve": {
       "continuous": true,
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
-      "dependsOn": [
-        "build"
-      ],
+      "dependsOn": ["build"],
       "options": {
         "buildTarget": "auth:build",
         "runBuildTargetDependencies": false
@@ -76,9 +66,57 @@
         }
       }
     },
+    "serve-e2e": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "options": {
+        "buildTarget": "auth:build",
+        "inspect": false,
+        "runBuildTargetDependencies": false,
+        "watch": false
+      }
+    },
     "test": {
+      "dependsOn": ["prisma-generate"],
       "options": {
         "passWithNoTests": true
+      }
+    },
+    "prisma-generate": {
+      "command": "prisma generate",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/prisma/schema.prisma",
+        "{projectRoot}/prisma.config.ts",
+        "{workspaceRoot}/package-lock.json"
+      ],
+      "outputs": ["{projectRoot}/src/generated/prisma"]
+    },
+    "prisma-migrate-dev": {
+      "command": "prisma migrate dev",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-migrate-deploy": {
+      "command": "prisma migrate deploy",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-validate": {
+      "command": "prisma validate",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-studio": {
+      "command": "prisma studio",
+      "options": {
+        "cwd": "{projectRoot}"
       }
     }
   }

@@ -1,0 +1,278 @@
+---
+- name: Provision Pixaeron application VPS
+  hosts: application_vps
+  become: true
+  gather_facts: true
+
+  vars:
+    deployment_root: /opt/pixaeron
+    swap_file_path: /swapfile
+    aws_rds_ca_bundle_url: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+    docker_apt_architectures:
+      x86_64: amd64
+      aarch64: arm64
+    supported_ubuntu_releases:
+      - jammy
+      - noble
+      - resolute
+
+  pre_tasks:
+    - name: Validate provisioning inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_release in supported_ubuntu_releases
+          - ansible_facts.architecture in docker_apt_architectures
+          - (deploy_user | default('') | length) > 0
+          - (deploy_public_key | default('')) is match('^ssh-(ed25519|rsa) [A-Za-z0-9+/]+={0,3}( .+)?$')
+          - "'REPLACE_WITH_' not in (deploy_public_key | default(''))"
+          - (swap_size_mb | default(0) | int) >= 512
+          - (swap_swappiness | default(-1) | int) >= 0
+          - (swap_swappiness | default(101) | int) <= 100
+        fail_msg: >-
+          Check the Ubuntu version, CPU architecture, deploy public key, and
+          swap settings in inventory.yml.
+
+  tasks:
+    - name: Install base system packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - fail2ban
+          - python3-debian
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Remove packages that conflict with Docker Engine
+      ansible.builtin.apt:
+        name:
+          - containerd
+          - docker-compose
+          - docker-compose-v2
+          - docker-doc
+          - docker.io
+          - podman-docker
+          - runc
+        state: absent
+
+    - name: Configure the official Docker apt repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types:
+          - deb
+        uris:
+          - https://download.docker.com/linux/ubuntu
+        suites:
+          - '{{ ansible_facts.distribution_release }}'
+        components:
+          - stable
+        architectures:
+          - '{{ docker_apt_architectures[ansible_facts.architecture] }}'
+        signed_by: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      register: docker_repository
+
+    - name: Install Docker Engine and Compose
+      ansible.builtin.apt:
+        name:
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-ce
+          - docker-ce-cli
+          - docker-compose-plugin
+        state: present
+        update_cache: '{{ docker_repository.changed }}'
+
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Create the deployment user
+      ansible.builtin.user:
+        name: '{{ deploy_user }}'
+        groups:
+          - docker
+        append: true
+        create_home: true
+        password_lock: true
+        shell: /bin/bash
+        state: present
+
+    - name: Authorize the GitHub Actions deployment key
+      ansible.posix.authorized_key:
+        user: '{{ deploy_user }}'
+        key: '{{ deploy_public_key }}'
+        key_options: no-agent-forwarding,no-port-forwarding,no-X11-forwarding
+        manage_dir: true
+        state: present
+
+    - name: Create the deployment directory
+      ansible.builtin.file:
+        path: '{{ deployment_root }}'
+        state: directory
+        owner: '{{ deploy_user }}'
+        group: docker
+        mode: '0755'
+
+    - name: Create the certificate directory
+      ansible.builtin.file:
+        path: '{{ deployment_root }}/certs'
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Download the AWS PostgreSQL CA bundle
+      ansible.builtin.get_url:
+        url: '{{ aws_rds_ca_bundle_url }}'
+        dest: '{{ deployment_root }}/certs/global-bundle.pem'
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Inspect the swap file
+      ansible.builtin.stat:
+        path: '{{ swap_file_path }}'
+      register: swap_file
+
+    - name: Validate the existing swap file size
+      ansible.builtin.assert:
+        that:
+          - swap_file.stat.size == ((swap_size_mb | int) * 1024 * 1024)
+        fail_msg: >-
+          The existing swap file has a different size. Disable and remove it
+          before changing swap_size_mb.
+      when: swap_file.stat.exists
+
+    - name: Allocate the swap file
+      ansible.builtin.command:
+        argv:
+          - fallocate
+          - -l
+          - '{{ swap_size_mb }}M'
+          - '{{ swap_file_path }}'
+        creates: '{{ swap_file_path }}'
+
+    - name: Protect the swap file
+      ansible.builtin.file:
+        path: '{{ swap_file_path }}'
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Inspect active swap devices
+      ansible.builtin.command:
+        argv:
+          - swapon
+          - --show=NAME
+          - --noheadings
+      register: active_swap
+      changed_when: false
+      check_mode: false
+
+    - name: Format the swap file
+      ansible.builtin.command:
+        argv:
+          - mkswap
+          - '{{ swap_file_path }}'
+      when: swap_file_path not in active_swap.stdout_lines
+
+    - name: Persist the swap file
+      ansible.posix.mount:
+        path: none
+        src: '{{ swap_file_path }}'
+        fstype: swap
+        opts: sw
+        state: present
+
+    - name: Enable the swap file
+      ansible.builtin.command:
+        argv:
+          - swapon
+          - '{{ swap_file_path }}'
+      when: swap_file_path not in active_swap.stdout_lines
+
+    - name: Configure swap tendency
+      ansible.posix.sysctl:
+        name: vm.swappiness
+        value: '{{ swap_swappiness }}'
+        sysctl_file: /etc/sysctl.d/99-pixaeron-swap.conf
+        state: present
+        reload: true
+
+    - name: Preserve filesystem metadata cache
+      ansible.posix.sysctl:
+        name: vm.vfs_cache_pressure
+        value: '50'
+        sysctl_file: /etc/sysctl.d/99-pixaeron-swap.conf
+        state: present
+        reload: true
+
+    - name: Configure SSH brute-force protection
+      ansible.builtin.copy:
+        src: files/sshd-jail.local
+        dest: /etc/fail2ban/jail.d/sshd.local
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart Fail2ban
+
+    - name: Enable Fail2ban
+      ansible.builtin.service:
+        name: fail2ban
+        enabled: true
+        state: started
+
+    - name: Install SSH hardening settings
+      ansible.builtin.copy:
+        src: files/00-pixaeron-hardening.conf
+        dest: /etc/ssh/sshd_config.d/00-pixaeron-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Reload SSH
+
+    - name: Apply SSH hardening safely
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify Docker access for the deployment user
+      ansible.builtin.command:
+        argv:
+          - docker
+          - info
+      become_user: '{{ deploy_user }}'
+      changed_when: false
+
+    - name: Verify Docker Compose
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - version
+      become_user: '{{ deploy_user }}'
+      changed_when: false
+
+  handlers:
+    - name: Restart Fail2ban
+      ansible.builtin.service:
+        name: fail2ban
+        state: restarted
+
+    - name: Validate SSH configuration
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/sshd
+          - -t
+      changed_when: false
+      listen: Reload SSH
+
+    - name: Reload SSH service
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+      listen: Reload SSH
