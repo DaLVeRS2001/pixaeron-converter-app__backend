@@ -125,7 +125,11 @@ jobs:
 
       - name: Lint, test, and build affected projects
         if: github.event_name != 'workflow_dispatch'
-        run: npx nx affected -t lint test build e2e
+        run: npx nx affected -t lint test build
+
+      - name: Run affected end-to-end tests
+        if: github.event_name != 'workflow_dispatch'
+        run: npx nx affected -t e2e
 
       - name: Verify selected deployable projects
         if: github.event_name == 'workflow_dispatch'
