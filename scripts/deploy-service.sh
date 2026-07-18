@@ -89,6 +89,8 @@ rollback() {
   exit "$exit_code"
 }
 
+# Backups are complete before rollback is enabled, so a backup failure leaves
+# the live deployment files untouched.
 trap rollback ERR
 
 mv -f "$incoming_compose" "$compose_file"
@@ -115,6 +117,8 @@ docker compose --env-file "$deployment_env" -f "$compose_file" \
 docker compose --env-file "$deployment_env" -f "$compose_file" pull "$compose_service"
 
 if [[ -n "$migration_command" && "$migration_command" != 'null' ]]; then
+  # Database migrations must remain backward-compatible: rollback restores the
+  # previous application image, but intentionally does not mutate database history.
   docker compose --env-file "$deployment_env" -f "$compose_file" \
     run --rm --no-deps "$compose_service" sh -lc "$migration_command"
 fi
@@ -123,4 +127,13 @@ docker compose --env-file "$deployment_env" -f "$compose_file" \
   up -d --no-deps --wait --wait-timeout 90 "$compose_service"
 
 trap - ERR
+
+# Remove unused service images older than seven days. The running image is not
+# eligible for pruning, and a cleanup failure does not fail a healthy deployment.
+if ! docker image prune -af \
+  --filter "label=com.pixaeron.service=$compose_service" \
+  --filter 'until=168h' > /dev/null; then
+  echo "Could not prune old $compose_service images; continuing." >&2
+fi
+
 rm -f "$compose_backup" "$deployment_env_backup" "$runtime_env_backup"

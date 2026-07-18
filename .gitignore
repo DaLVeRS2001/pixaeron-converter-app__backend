@@ -39,7 +39,7 @@ testem.log
 .DS_Store
 Thumbs.db
 
-
+/workspace-data/
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
@@ -61,3 +61,5 @@ Thumbs.db
 .ci/
 runtime.env
 deployment.env
+/apps/**/src/generated/
+

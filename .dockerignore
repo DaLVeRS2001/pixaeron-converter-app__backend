@@ -19,4 +19,5 @@ docker-compose*.yaml
 # CI/deployment generated files
 .ci
 runtime.env
+service.env
 deployment.env

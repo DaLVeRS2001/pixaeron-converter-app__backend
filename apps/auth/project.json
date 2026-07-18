@@ -66,6 +66,16 @@
         }
       }
     },
+    "serve-e2e": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "options": {
+        "buildTarget": "auth:build",
+        "inspect": false,
+        "runBuildTargetDependencies": false,
+        "watch": false
+      }
+    },
     "test": {
       "dependsOn": ["prisma-generate"],
       "options": {
