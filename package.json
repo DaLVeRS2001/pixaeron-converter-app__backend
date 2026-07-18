@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "docker:start": "docker compose up -d --build",
+    "docker:stop": "docker compose down",
+    "check": "nx run-many --targets=lint,test,build"
   },
   "private": true,
   "workspaces": [

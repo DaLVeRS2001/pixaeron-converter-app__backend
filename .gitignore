@@ -38,6 +38,7 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
+docs
 
 /workspace-data/
 .nx/cache
@@ -61,5 +62,6 @@ Thumbs.db
 .ci/
 runtime.env
 deployment.env
+/infra/ansible/inventory.yml
 /apps/**/src/generated/
 

@@ -4,20 +4,13 @@ import cookieParser = require('cookie-parser');
 
 export async function init(app: INestApplication, globalPrefix = 'api') {
   const configService = app.get(ConfigService);
-  const trustProxy = configService.get<string>('TRUST_PROXY');
+  const trustProxy = configService.get<string>('TRUST_PROXY') ?? '0';
 
-  if (trustProxy) {
-    const normalizedTrustProxy = trustProxy.trim();
-    const trustProxyValue = /^\d+$/.test(normalizedTrustProxy)
-      ? Number(normalizedTrustProxy)
-      : normalizedTrustProxy === 'true'
-        ? true
-        : normalizedTrustProxy === 'false'
-          ? false
-          : normalizedTrustProxy;
-
-    app.getHttpAdapter().getInstance().set('trust proxy', trustProxyValue);
+  if (trustProxy !== '0' && trustProxy !== '1') {
+    throw new Error('TRUST_PROXY must be either 0 or 1');
   }
+
+  app.getHttpAdapter().getInstance().set('trust proxy', Number(trustProxy));
 
   app.useGlobalPipes(
     new ValidationPipe({
