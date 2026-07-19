@@ -5,7 +5,8 @@
     "dockerfile": "apps/auth/Dockerfile",
     "composeService": "auth",
     "imageTagEnv": "AUTH_IMAGE_TAG",
-    "runtimeEnvSecret": "AUTH_RUNTIME_ENV",
+    "ssmPath": "/pixaeron/production/auth",
+    "secureParameters": ["DATABASE_URL", "JWT_SECRET", "IP_HASH_SECRET"],
     "runtimeEnvFileEnv": "AUTH_RUNTIME_ENV_FILE",
     "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/auth/prisma.config.ts"
   }
