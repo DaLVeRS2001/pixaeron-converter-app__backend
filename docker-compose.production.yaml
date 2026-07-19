@@ -5,7 +5,8 @@ services:
     image: ghcr.io/dalvers2001/pixaeron-auth:${AUTH_IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
-      - ${AUTH_RUNTIME_ENV_FILE:-/opt/pixaeron/auth.env}
+      - path: ${AUTH_RUNTIME_ENV_FILE:-/opt/pixaeron/auth.env}
+        format: raw
     environment:
       NODE_ENV: production
       PORT: 3000

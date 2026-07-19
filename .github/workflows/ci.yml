@@ -66,7 +66,16 @@ jobs:
               (.dockerfile | type) == "string" and
               (.composeService | type) == "string" and
               (.imageTagEnv | type) == "string" and
-              (.runtimeEnvSecret | type) == "string" and
+              (.ssmPath | type) == "string" and
+              (.ssmPath | startswith("/")) and
+              (.ssmPath | endswith("/") | not) and
+              (.secureParameters | type) == "array" and
+              (.secureParameters | length) > 0 and
+              all(.secureParameters[];
+                type == "string" and test("^[A-Z_][A-Z0-9_]*$")
+              ) and
+              (.secureParameters | length) ==
+              (.secureParameters | unique | length) and
               (.runtimeEnvFileEnv | type) == "string" and
               (.migrationCommand | type) == "string"
             ) and
@@ -232,6 +241,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
       packages: write
 
     strategy:
@@ -269,21 +279,70 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.project }}
           cache-to: type=gha,mode=max,scope=${{ matrix.project }}
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
       - name: Generate runtime env file
         env:
-          RUNTIME_ENV_SECRET_NAME: ${{ matrix.runtimeEnvSecret }}
-          SERVICE_RUNTIME_ENV: ${{ secrets[matrix.runtimeEnvSecret] }}
+          SSM_PATH: ${{ matrix.ssmPath }}
+          SECURE_PARAMETERS: ${{ toJson(matrix.secureParameters) }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -z "$SERVICE_RUNTIME_ENV" ]]; then
-            echo "$RUNTIME_ENV_SECRET_NAME GitHub Environment secret is empty." >&2
+          parameters="$(
+            aws ssm get-parameters-by-path \
+              --path "$SSM_PATH" \
+              --recursive \
+              --with-decryption \
+              --query 'Parameters' \
+              --output json
+          )"
+
+          prefix="$SSM_PATH/"
+          jq -e --arg prefix "$prefix" '
+            length > 0 and
+            all(.[];
+              (.Name | startswith($prefix)) and
+              ((.Name | ltrimstr($prefix)) | test("^[A-Z_][A-Z0-9_]*$")) and
+              (.Value | contains("\u0000") | not) and
+              (.Value | contains("\n") | not) and
+              (.Value | contains("\r") | not)
+            ) and
+            ([.[] | .Name | ltrimstr($prefix)] | length) ==
+            ([.[] | .Name | ltrimstr($prefix)] | unique | length)
+          ' <<< "$parameters" > /dev/null || {
+            echo "No valid, unique environment parameters found under $SSM_PATH." >&2
             exit 1
-          fi
+          }
+
+          while IFS= read -r key; do
+            parameter_type="$(
+              jq -r --arg name "$prefix$key" '
+                first(.[] | select(.Name == $name) | .Type) // ""
+              ' <<< "$parameters"
+            )"
+
+            if [[ "$parameter_type" != 'SecureString' ]]; then
+              echo "$prefix$key must exist and use the SecureString type." >&2
+              exit 1
+            fi
+          done < <(jq -r '.[]' <<< "$SECURE_PARAMETERS")
 
           umask 077
-          printf '%s\n' "$SERVICE_RUNTIME_ENV" > service.env
+          : > service.env
+
+          while IFS=$'\t' read -r name encoded_value; do
+            key="${name#"$prefix"}"
+            value="$(printf '%s' "$encoded_value" | base64 --decode)"
+            printf '%s=%s\n' "$key" "$value" >> service.env
+          done < <(
+            jq -r 'sort_by(.Name)[] | [.Name, (.Value | @base64)] | @tsv' \
+              <<< "$parameters"
+          )
 
       - name: Configure SSH
         env:
