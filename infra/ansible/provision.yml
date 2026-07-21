@@ -23,6 +23,7 @@
           - ansible_facts.distribution == 'Ubuntu'
           - ansible_facts.distribution_release in supported_ubuntu_releases
           - ansible_facts.architecture in docker_apt_architectures
+          - (api_domain | default('')) is match('^[A-Za-z0-9.-]+$')
           - (deploy_user | default('') | length) > 0
           - (deploy_public_key | default('')) is match('^ssh-(ed25519|rsa) [A-Za-z0-9+/]+={0,3}( .+)?$')
           - "'REPLACE_WITH_' not in (deploy_public_key | default(''))"
@@ -30,15 +31,18 @@
           - (swap_swappiness | default(-1) | int) >= 0
           - (swap_swappiness | default(101) | int) <= 100
         fail_msg: >-
-          Check the Ubuntu version, CPU architecture, deploy public key, and
-          swap settings in inventory.yml.
+          Check the Ubuntu version, CPU architecture, API domain, deploy public
+          key, and swap settings in inventory.yml.
 
   tasks:
     - name: Install base system packages
       ansible.builtin.apt:
         name:
+          - apt-transport-https
           - ca-certificates
           - curl
+          - debian-archive-keyring
+          - debian-keyring
           - fail2ban
           - python3-debian
         state: present
@@ -88,6 +92,43 @@
     - name: Enable Docker
       ansible.builtin.service:
         name: docker
+        enabled: true
+        state: started
+
+    - name: Configure the official Caddy apt repository
+      ansible.builtin.deb822_repository:
+        name: caddy-stable
+        types:
+          - deb
+        uris:
+          - https://dl.cloudsmith.io/public/caddy/stable/deb/debian
+        suites:
+          - any-version
+        components:
+          - main
+        signed_by: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+        state: present
+      register: caddy_repository
+
+    - name: Install Caddy
+      ansible.builtin.apt:
+        name: caddy
+        state: present
+        update_cache: '{{ caddy_repository.changed }}'
+
+    - name: Install the Caddy configuration
+      ansible.builtin.template:
+        src: templates/Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        owner: root
+        group: caddy
+        mode: '0644'
+        validate: /usr/bin/caddy validate --config %s --adapter caddyfile
+      notify: Reload Caddy
+
+    - name: Enable Caddy
+      ansible.builtin.service:
+        name: caddy
         enabled: true
         state: started
 
@@ -257,6 +298,17 @@
       become_user: '{{ deploy_user }}'
       changed_when: false
 
+    - name: Verify Caddy configuration
+      ansible.builtin.command:
+        argv:
+          - caddy
+          - validate
+          - --config
+          - /etc/caddy/Caddyfile
+          - --adapter
+          - caddyfile
+      changed_when: false
+
   handlers:
     - name: Restart Fail2ban
       ansible.builtin.service:
@@ -276,3 +328,8 @@
         name: ssh
         state: reloaded
       listen: Reload SSH
+
+    - name: Reload Caddy
+      ansible.builtin.service:
+        name: caddy
+        state: reloaded

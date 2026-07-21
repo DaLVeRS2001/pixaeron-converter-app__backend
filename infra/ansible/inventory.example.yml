@@ -8,6 +8,7 @@ all:
           ansible_user: ubuntu
           ansible_ssh_private_key_file: /home/YOUR_WSL_USER/.ssh/pixaeron-prod
       vars:
+        api_domain: api.pixaeron.com
         deploy_user: pixaeron
         deploy_public_key: >-
           ssh-ed25519 REPLACE_WITH_GITHUB_ACTIONS_PUBLIC_KEY github-actions@pixaeron

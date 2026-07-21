@@ -1,0 +1,10 @@
+{{ api_domain }} {
+    @auth path /auth /auth/*
+    handle @auth {
+        reverse_proxy 127.0.0.1:3000
+    }
+
+    handle {
+        respond "Not Found" 404
+    }
+}
