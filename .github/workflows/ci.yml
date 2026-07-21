@@ -41,6 +41,7 @@ jobs:
       PORT: 3000
       JWT_SECRET: ci-only-secret
       JWT_EXPIRATION_MS: 900000
+      CORS_ORIGINS: http://localhost:3000
 
     outputs:
       deploy_matrix: ${{ steps.deploy_matrix.outputs.matrix }}
