@@ -2,15 +2,34 @@ import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisLockService } from '../../redis/redis-lock.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class SessionCleanupService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisLockService: RedisLockService,
+  ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async deleteExpiredAuthSessionsAndEvents() {
+    const lockToken = await this.redisLockService.acquire(
+      'auth:session-cleanup',
+      60 * 60 * 1000,
+    );
+
+    if (!lockToken) return;
+
+    try {
+      await this.deleteExpiredData();
+    } finally {
+      await this.redisLockService.release('auth:session-cleanup', lockToken);
+    }
+  }
+
+  private async deleteExpiredData() {
     const now = Date.now();
     const sessionCutoff = new Date(now - 30 * DAY_MS);
     const eventCutoff = new Date(now - 90 * DAY_MS);

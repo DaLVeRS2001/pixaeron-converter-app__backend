@@ -16,6 +16,7 @@ import { LoginInput } from './dto/login.input';
 import { RegisterInput } from './dto/register.input';
 import { GoogleLoginInput } from './dto/google-login.input';
 import { GoogleAuthService } from './google-auth.service';
+import { LoginAttemptService } from './login-attempt.service';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,7 @@ export class AuthService {
     private readonly sessionAuditService: SessionAuditService,
     private readonly captchaService: CaptchaService,
     private readonly googleAuthService: GoogleAuthService,
+    private readonly loginAttemptService: LoginAttemptService,
   ) {}
 
   private readonly invalidCredentialsMessage = 'Invalid email or password';
@@ -38,9 +40,12 @@ export class AuthService {
     await this.captchaService.verify(captchaToken, request, 'login');
 
     const normalizedEmail = email.trim().toLowerCase();
+    await this.loginAttemptService.assertAllowed(normalizedEmail, request);
+
     const user = await this.userService.getUser({ email: normalizedEmail });
 
     if (!user?.password) {
+      await this.loginAttemptService.recordFailure(normalizedEmail, request);
       await this.logFailedLogin(request, user?.id);
       throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
@@ -48,9 +53,12 @@ export class AuthService {
     const isPasswordValid = await compare(password, user.password);
 
     if (!isPasswordValid) {
+      await this.loginAttemptService.recordFailure(normalizedEmail, request);
       await this.logFailedLogin(request, user.id);
       throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
+
+    await this.loginAttemptService.clear(normalizedEmail, request);
 
     return this.sessionService.createSession(
       user.id,

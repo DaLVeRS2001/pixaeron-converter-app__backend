@@ -82,7 +82,7 @@ rollback() {
 
   if $had_compose && $had_deployment_env && $had_previous_image; then
     docker compose --env-file "$deployment_env" -f "$compose_file" \
-      up -d --no-deps --wait --wait-timeout 90 "$compose_service"
+      up -d --wait --wait-timeout 90 "$compose_service"
   fi
 
   rm -f "$incoming_compose" "$incoming_runtime_env"
@@ -114,7 +114,7 @@ upsert_env_value "$image_tag_env" "$image_tag"
 
 docker compose --env-file "$deployment_env" -f "$compose_file" \
   config --quiet "$compose_service"
-docker compose --env-file "$deployment_env" -f "$compose_file" pull "$compose_service"
+docker compose --env-file "$deployment_env" -f "$compose_file" pull --include-deps "$compose_service"
 
 if [[ -n "$migration_command" && "$migration_command" != 'null' ]]; then
   # Database migrations must remain backward-compatible: rollback restores the
@@ -124,7 +124,7 @@ if [[ -n "$migration_command" && "$migration_command" != 'null' ]]; then
 fi
 
 docker compose --env-file "$deployment_env" -f "$compose_file" \
-  up -d --no-deps --wait --wait-timeout 90 "$compose_service"
+  up -d --wait --wait-timeout 90 "$compose_service"
 
 trap - ERR
 

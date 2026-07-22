@@ -1,16 +1,32 @@
-{{ api_domain }} {
+{
+	servers 127.0.0.1:8080 {
+		trusted_proxies static 127.0.0.0/8 ::1
+		trusted_proxies_strict
+		client_ip_headers CF-Connecting-IP
+	}
+}
 
-    @health path /auth/health
-    handle @health {
-        respond "Not Found" 404
-    }
+:8080 {
+	bind 127.0.0.1
+	@health {
+		host {{ api_domain }}
+		path /auth/health
+	}
+	handle @health {
+		respond "Not Found" 404
+	}
 
-    @auth path /auth /auth/*
-    handle @auth {
-        reverse_proxy 127.0.0.1:3000
-    }
+	@auth {
+		host {{ api_domain }}
+		path /auth /auth/*
+	}
+	handle @auth {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
 
-    handle {
-        respond "Not Found" 404
-    }
+	handle {
+		respond "Not Found" 404
+	}
 }

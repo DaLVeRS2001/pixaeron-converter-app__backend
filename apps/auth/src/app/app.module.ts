@@ -9,10 +9,14 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { HttpContext } from '@pixaeron/nestjs';
 import { HealthController } from './health.controller';
+import { AppRedisModule } from './redis/redis.module';
+import { RateLimitModule } from './rate-limit/rate-limit.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    AppRedisModule,
+    RateLimitModule,
     ScheduleModule.forRoot(),
     PrismaModule,
     SessionModule,

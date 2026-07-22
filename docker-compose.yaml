@@ -25,14 +25,37 @@ services:
       - apps/auth/.env
     environment:
       NODE_ENV: development
+      REDIS_URL: redis://redis:6379
     command: >-
       sh -c "./node_modules/.bin/prisma migrate deploy
       --config apps/auth/prisma.config.ts && node main.js"
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --appendfsync
+      - everysec
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres18_data:
+  redis_data:

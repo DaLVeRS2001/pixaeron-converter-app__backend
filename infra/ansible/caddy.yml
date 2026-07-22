@@ -1,0 +1,131 @@
+---
+- name: Configure Caddy behind Cloudflare Tunnel
+  hosts: application_vps
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validate the API domain
+      ansible.builtin.assert:
+        that:
+          - (api_domain | default('')) is match('^[A-Za-z0-9.-]+$')
+        fail_msg: Set a valid api_domain in inventory.yml.
+
+    - name: Inspect the Cloudflare Tunnel service
+      ansible.builtin.stat:
+        path: /etc/systemd/system/cloudflared.service
+      register: cloudflared_service
+
+    - name: Read the Cloudflare Tunnel token from the controller
+      ansible.builtin.set_fact:
+        cloudflare_tunnel_token: >-
+          {{ lookup('ansible.builtin.env', 'CLOUDFLARE_TUNNEL_TOKEN') }}
+      no_log: true
+
+    - name: Require a token for the first Tunnel installation
+      ansible.builtin.assert:
+        that:
+          - (cloudflare_tunnel_token | length) > 0
+        fail_msg: >-
+          Export CLOUDFLARE_TUNNEL_TOKEN before the first caddy.yml run.
+      when: not cloudflared_service.stat.exists
+      no_log: true
+
+  tasks:
+    - name: Install repository prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - python3-debian
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Configure the official Caddy apt repository
+      ansible.builtin.deb822_repository:
+        name: caddy-stable
+        types:
+          - deb
+        uris:
+          - https://dl.cloudsmith.io/public/caddy/stable/deb/debian
+        suites:
+          - any-version
+        components:
+          - main
+        signed_by: https://dl.cloudsmith.io/public/caddy/stable/gpg.key
+        state: present
+      register: caddy_repository
+
+    - name: Configure the official cloudflared apt repository
+      ansible.builtin.deb822_repository:
+        name: cloudflared
+        types:
+          - deb
+        uris:
+          - https://pkg.cloudflare.com/cloudflared
+        suites:
+          - '{{ ansible_facts.distribution_release }}'
+        components:
+          - main
+        signed_by: https://pkg.cloudflare.com/cloudflare-main.gpg
+        state: present
+      register: cloudflared_repository
+
+    - name: Install Caddy and cloudflared
+      ansible.builtin.apt:
+        name:
+          - caddy
+          - cloudflared
+        state: present
+        update_cache: '{{ caddy_repository.changed or cloudflared_repository.changed }}'
+
+    - name: Install the Caddy configuration
+      ansible.builtin.template:
+        src: templates/Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        owner: root
+        group: caddy
+        mode: '0644'
+        validate: /usr/bin/caddy validate --config %s --adapter caddyfile
+      notify: Reload Caddy
+
+    - name: Enable Caddy
+      ansible.builtin.systemd_service:
+        name: caddy
+        enabled: true
+        state: started
+
+    - name: Apply the Caddy configuration before starting the Tunnel
+      ansible.builtin.meta: flush_handlers
+
+    - name: Install the Cloudflare Tunnel service
+      ansible.builtin.command:
+        argv:
+          - cloudflared
+          - service
+          - install
+          - '{{ cloudflare_tunnel_token }}'
+      when: not cloudflared_service.stat.exists
+      no_log: true
+
+    - name: Enable the Cloudflare Tunnel service
+      ansible.builtin.systemd_service:
+        name: cloudflared
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Verify the local Caddy listener
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/unknown
+        headers:
+          Host: '{{ api_domain }}'
+        status_code: 404
+        return_content: false
+      changed_when: false
+
+  handlers:
+    - name: Reload Caddy
+      ansible.builtin.systemd_service:
+        name: caddy
+        state: reloaded

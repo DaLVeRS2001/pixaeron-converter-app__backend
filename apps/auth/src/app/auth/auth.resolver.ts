@@ -9,12 +9,15 @@ import { GoogleLoginInput } from './dto/google-login.input';
 import { LoginInput } from './dto/login.input';
 import { RegisterInput } from './dto/register.input';
 import { GqlAuthGuard } from './guards/gql-auth.guard';
+import { Throttle } from '@nestjs/throttler';
+import { AUTH_RATE_LIMIT } from '../rate-limit/rate-limit.constants';
 
 @Resolver()
 export class AuthResolver {
   constructor(private readonly authService: AuthService) {}
 
   @Mutation(() => User)
+  @Throttle(AUTH_RATE_LIMIT)
   async login(
     @Args('loginInput') loginInput: LoginInput,
     @Context() context: HttpContext,
@@ -23,6 +26,7 @@ export class AuthResolver {
   }
 
   @Mutation(() => User)
+  @Throttle(AUTH_RATE_LIMIT)
   async register(
     @Args('registerInput') registerInput: RegisterInput,
     @Context() context: HttpContext,
@@ -31,6 +35,7 @@ export class AuthResolver {
   }
 
   @Mutation(() => User)
+  @Throttle(AUTH_RATE_LIMIT)
   async googleLogin(
     @Args('googleLoginInput') googleLoginInput: GoogleLoginInput,
     @Context() context: HttpContext,
