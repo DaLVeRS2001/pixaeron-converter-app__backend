@@ -64,4 +64,3 @@ runtime.env
 deployment.env
 /infra/ansible/inventory.yml
 /apps/**/src/generated/
-

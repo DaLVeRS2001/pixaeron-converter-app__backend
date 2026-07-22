@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { CaptchaService } from './captcha.service';
 import { GoogleAuthService } from './google-auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { LoginAttemptService } from './login-attempt.service';
 
 @Module({
   providers: [
@@ -15,6 +16,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     CaptchaService,
     GoogleAuthService,
+    LoginAttemptService,
   ],
   imports: [ConfigModule, PassportModule, UserModule],
 })

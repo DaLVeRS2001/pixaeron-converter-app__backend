@@ -37,8 +37,11 @@
     - name: Install base system packages
       ansible.builtin.apt:
         name:
+          - apt-transport-https
           - ca-certificates
           - curl
+          - debian-archive-keyring
+          - debian-keyring
           - fail2ban
           - python3-debian
         state: present

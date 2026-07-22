@@ -36,6 +36,11 @@ import { SessionService } from './services/session.service';
     SessionCleanupService,
     GqlSessionAuthGuard,
   ],
-  exports: [SessionService, SessionAuditService, GqlSessionAuthGuard],
+  exports: [
+    SessionService,
+    SessionMetadataService,
+    SessionAuditService,
+    GqlSessionAuthGuard,
+  ],
 })
 export class SessionModule {}

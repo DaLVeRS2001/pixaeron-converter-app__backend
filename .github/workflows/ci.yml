@@ -35,12 +35,24 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/auth
       PORT: 3000
       JWT_SECRET: ci-only-secret
+      IP_HASH_SECRET: ci-only-ip-hash-secret
       JWT_EXPIRATION_MS: 900000
+      CORS_ORIGINS: http://localhost:3000
+      REDIS_URL: redis://127.0.0.1:6379
 
     outputs:
       deploy_matrix: ${{ steps.deploy_matrix.outputs.matrix }}
