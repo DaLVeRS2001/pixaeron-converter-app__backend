@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-redis/client';
 import { randomUUID } from 'node:crypto';
 import type { RedisClientType } from 'redis';
+
+import { REDIS_NAMESPACE } from './redis-options';
 
 const RELEASE_LOCK_SCRIPT = `
   if redis.call('GET', KEYS[1]) == ARGV[1] then
@@ -12,21 +14,28 @@ const RELEASE_LOCK_SCRIPT = `
 
 @Injectable()
 export class RedisLockService {
-  constructor(@InjectRedis() private readonly redis: RedisClientType) {}
+  constructor(
+    @InjectRedis() private readonly redis: RedisClientType,
+    @Inject(REDIS_NAMESPACE) private readonly namespace: string,
+  ) {}
 
   async acquire(key: string, ttlMs: number): Promise<string | null> {
     const token = randomUUID();
-    const result = await this.redis.set(`lock:${key}`, token, {
-      NX: true,
-      PX: ttlMs,
-    });
+    const result = await this.redis.set(
+      `${this.namespace}:lock:${key}`,
+      token,
+      {
+        NX: true,
+        PX: ttlMs,
+      },
+    );
 
     return result === 'OK' ? token : null;
   }
 
   async release(key: string, token: string): Promise<void> {
     await this.redis.eval(RELEASE_LOCK_SCRIPT, {
-      keys: [`lock:${key}`],
+      keys: [`${this.namespace}:lock:${key}`],
       arguments: [token],
     });
   }

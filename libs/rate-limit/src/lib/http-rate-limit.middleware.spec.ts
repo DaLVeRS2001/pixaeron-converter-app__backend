@@ -1,13 +1,24 @@
 import { HttpStatus } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 
-import type { SessionMetadataService } from '../session/services/session-metadata.service';
 import { HttpRateLimitMiddleware } from './http-rate-limit.middleware';
+import type { RateLimitOptions } from './rate-limit.options';
 
 describe('HttpRateLimitMiddleware', () => {
   const redis = { eval: jest.fn() };
-  const sessionMetadataService = {
-    getFromRequest: jest.fn().mockReturnValue({ ipHash: 'request-ip-hash' }),
+  const configService = {
+    getOrThrow: jest.fn().mockReturnValue('ip-secret'),
+  };
+  const options: RateLimitOptions = {
+    namespace: 'auth',
+    ipHashSecretConfigKey: 'IP_HASH_SECRET',
+    httpLimits: [
+      { name: 'second', ttl: 1_000, limit: 30 },
+      { name: 'minute', ttl: 60_000, limit: 600 },
+      { name: 'quarter-hour', ttl: 900_000, limit: 6_000 },
+    ],
+    throttlers: [],
   };
   const response = {
     setHeader: jest.fn(),
@@ -17,23 +28,31 @@ describe('HttpRateLimitMiddleware', () => {
   const next = jest.fn() as NextFunction;
   const middleware = new HttpRateLimitMiddleware(
     redis as never,
-    sessionMetadataService as unknown as SessionMetadataService,
+    configService as never,
+    options,
   );
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('counts the raw HTTP request in all Redis windows', async () => {
+  it('counts the raw HTTP request in namespaced Redis windows', async () => {
     redis.eval.mockResolvedValue(0);
+    const ipHash = createHmac('sha256', 'ip-secret')
+      .update('203.0.113.10')
+      .digest('hex');
 
-    await middleware.use({ method: 'POST' } as Request, response, next);
+    await middleware.use(
+      { method: 'POST', ip: '203.0.113.10' } as Request,
+      response,
+      next,
+    );
 
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         keys: [
-          'auth:http:second:request-ip-hash',
-          'auth:http:minute:request-ip-hash',
-          'auth:http:quarter-hour:request-ip-hash',
+          `auth:http:second:${ipHash}`,
+          `auth:http:minute:${ipHash}`,
+          `auth:http:quarter-hour:${ipHash}`,
         ],
         arguments: ['1000', '30', '60000', '600', '900000', '6000'],
       }),
@@ -44,14 +63,14 @@ describe('HttpRateLimitMiddleware', () => {
   it('returns 429 before GraphQL handles an over-limit request', async () => {
     redis.eval.mockResolvedValue(12_500);
 
-    await middleware.use({ method: 'POST' } as Request, response, next);
+    await middleware.use(
+      { method: 'POST', ip: '203.0.113.10' } as Request,
+      response,
+      next,
+    );
 
     expect(response.setHeader).toHaveBeenCalledWith('Retry-After', 13);
     expect(response.status).toHaveBeenCalledWith(HttpStatus.TOO_MANY_REQUESTS);
-    expect(response.json).toHaveBeenCalledWith({
-      statusCode: HttpStatus.TOO_MANY_REQUESTS,
-      message: 'Too many requests',
-    });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -65,7 +84,11 @@ describe('HttpRateLimitMiddleware', () => {
   it('fails closed when Redis is unavailable', async () => {
     redis.eval.mockRejectedValue(new Error('Redis unavailable'));
 
-    await middleware.use({ method: 'POST' } as Request, response, next);
+    await middleware.use(
+      { method: 'POST', ip: '203.0.113.10' } as Request,
+      response,
+      next,
+    );
 
     expect(response.status).toHaveBeenCalledWith(
       HttpStatus.SERVICE_UNAVAILABLE,

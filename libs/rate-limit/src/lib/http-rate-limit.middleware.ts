@@ -1,15 +1,17 @@
-import { HttpStatus, Injectable, type NestMiddleware } from '@nestjs/common';
+import {
+  HttpStatus,
+  Inject,
+  Injectable,
+  type NestMiddleware,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRedis } from '@nestjs-redis/client';
 import type { NextFunction, Request, Response } from 'express';
+import { createHmac } from 'node:crypto';
 import type { RedisClientType } from 'redis';
 
-import { SessionMetadataService } from '../session/services/session-metadata.service';
-
-const HTTP_LIMITS = [
-  { name: 'second', ttl: 1_000, limit: 30 },
-  { name: 'minute', ttl: 60_000, limit: 600 },
-  { name: 'quarter-hour', ttl: 15 * 60_000, limit: 6_000 },
-];
+import { RATE_LIMIT_OPTIONS } from './rate-limit.options';
+import type { RateLimitOptions } from './rate-limit.options';
 
 const INCREMENT_WINDOWS_SCRIPT = `
   local retryAfter = 0
@@ -36,10 +38,17 @@ const INCREMENT_WINDOWS_SCRIPT = `
 
 @Injectable()
 export class HttpRateLimitMiddleware implements NestMiddleware {
+  private readonly ipHashSecret: string;
+
   constructor(
     @InjectRedis() private readonly redis: RedisClientType,
-    private readonly sessionMetadataService: SessionMetadataService,
-  ) {}
+    configService: ConfigService,
+    @Inject(RATE_LIMIT_OPTIONS) private readonly options: RateLimitOptions,
+  ) {
+    this.ipHashSecret = configService.getOrThrow<string>(
+      options.ipHashSecretConfigKey,
+    );
+  }
 
   async use(request: Request, response: Response, next: NextFunction) {
     if (request.method === 'OPTIONS') {
@@ -47,15 +56,18 @@ export class HttpRateLimitMiddleware implements NestMiddleware {
       return;
     }
 
-    const ipHash =
-      this.sessionMetadataService.getFromRequest(request).ipHash ?? 'unknown';
+    const ipHash = createHmac('sha256', this.ipHashSecret)
+      .update(request.ip || request.socket.remoteAddress || 'unknown')
+      .digest('hex');
     let retryAfterMs: number;
 
     try {
       retryAfterMs = Number(
         await this.redis.eval(INCREMENT_WINDOWS_SCRIPT, {
-          keys: HTTP_LIMITS.map(({ name }) => `auth:http:${name}:${ipHash}`),
-          arguments: HTTP_LIMITS.flatMap(({ ttl, limit }) => [
+          keys: this.options.httpLimits.map(
+            ({ name }) => `${this.options.namespace}:http:${name}:${ipHash}`,
+          ),
+          arguments: this.options.httpLimits.flatMap(({ ttl, limit }) => [
             String(ttl),
             String(limit),
           ]),

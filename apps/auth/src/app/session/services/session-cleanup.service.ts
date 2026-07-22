@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { RedisLockService } from '@pixaeron/redis';
 
 import { PrismaService } from '../../prisma/prisma.service';
-import { RedisLockService } from '../../redis/redis-lock.service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -16,7 +16,7 @@ export class SessionCleanupService {
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async deleteExpiredAuthSessionsAndEvents() {
     const lockToken = await this.redisLockService.acquire(
-      'auth:session-cleanup',
+      'session-cleanup',
       60 * 60 * 1000,
     );
 
@@ -25,7 +25,7 @@ export class SessionCleanupService {
     try {
       await this.deleteExpiredData();
     } finally {
-      await this.redisLockService.release('auth:session-cleanup', lockToken);
+      await this.redisLockService.release('session-cleanup', lockToken);
     }
   }
 

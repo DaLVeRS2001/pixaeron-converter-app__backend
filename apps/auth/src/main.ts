@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { configureHttp, init } from '@pixaeron/nestjs';
-import { HttpRateLimitMiddleware } from './app/rate-limit/http-rate-limit.middleware';
+import { HttpRateLimitMiddleware } from '@pixaeron/rate-limit';
 
 const globalPrefix = 'auth';
 

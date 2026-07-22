@@ -16,7 +16,9 @@
     "paths": {
       "@pixaeron/nestjs": ["./libs/nestjs/src/index.ts"],
       "@pixaeron/graphql": ["./libs/graphql/src/index.ts"],
-      "@pixaeron/prisma": ["./libs/prisma/src/index.ts"]
+      "@pixaeron/prisma": ["./libs/prisma/src/index.ts"],
+      "@pixaeron/rate-limit": ["./libs/rate-limit/src/index.ts"],
+      "@pixaeron/redis": ["./libs/redis/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

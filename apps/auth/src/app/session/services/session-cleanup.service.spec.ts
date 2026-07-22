@@ -34,7 +34,7 @@ describe('SessionCleanupService', () => {
     expect(prisma.session.deleteMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionEvent.deleteMany).toHaveBeenCalledTimes(1);
     expect(redisLockService.release).toHaveBeenCalledWith(
-      'auth:session-cleanup',
+      'session-cleanup',
       'owner-token',
     );
   });
@@ -49,7 +49,7 @@ describe('SessionCleanupService', () => {
       'database unavailable',
     );
     expect(redisLockService.release).toHaveBeenCalledWith(
-      'auth:session-cleanup',
+      'session-cleanup',
       'owner-token',
     );
   });

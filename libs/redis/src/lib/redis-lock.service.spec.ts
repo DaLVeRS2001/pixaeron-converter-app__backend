@@ -5,7 +5,7 @@ describe('RedisLockService', () => {
     set: jest.fn(),
     eval: jest.fn(),
   };
-  const service = new RedisLockService(redis as never);
+  const service = new RedisLockService(redis as never, 'auth');
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -15,7 +15,7 @@ describe('RedisLockService', () => {
     const token = await service.acquire('cleanup', 60_000);
 
     expect(token).toEqual(expect.any(String));
-    expect(redis.set).toHaveBeenCalledWith('lock:cleanup', token, {
+    expect(redis.set).toHaveBeenCalledWith('auth:lock:cleanup', token, {
       NX: true,
       PX: 60_000,
     });
@@ -26,7 +26,7 @@ describe('RedisLockService', () => {
     await service.release('cleanup', 'owner-token');
 
     expect(redis.eval).toHaveBeenCalledWith(expect.any(String), {
-      keys: ['lock:cleanup'],
+      keys: ['auth:lock:cleanup'],
       arguments: ['owner-token'],
     });
   });

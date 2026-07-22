@@ -6,7 +6,7 @@ describe('RedisCacheService', () => {
     set: jest.fn(),
     del: jest.fn(),
   };
-  const service = new RedisCacheService(redis as never);
+  const service = new RedisCacheService(redis as never, 'auth');
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -14,7 +14,7 @@ describe('RedisCacheService', () => {
     redis.get.mockResolvedValue(JSON.stringify({ code: 'free' }));
 
     await expect(service.get('plans')).resolves.toEqual({ code: 'free' });
-    expect(redis.get).toHaveBeenCalledWith('cache:plans');
+    expect(redis.get).toHaveBeenCalledWith('auth:cache:plans');
   });
 
   it('returns null for a cache miss', async () => {
@@ -28,10 +28,10 @@ describe('RedisCacheService', () => {
     await service.delete('plans');
 
     expect(redis.set).toHaveBeenCalledWith(
-      'cache:plans',
+      'auth:cache:plans',
       JSON.stringify([{ code: 'free' }]),
       { EX: 300 },
     );
-    expect(redis.del).toHaveBeenCalledWith('cache:plans');
+    expect(redis.del).toHaveBeenCalledWith('auth:cache:plans');
   });
 });
