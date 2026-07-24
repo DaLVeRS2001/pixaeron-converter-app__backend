@@ -18,7 +18,6 @@
       "{workspaceRoot}/.github/workflows/ci.yml",
       "{workspaceRoot}/docker-compose.production.yaml",
       "{workspaceRoot}/.dockerignore",
-      "{workspaceRoot}/scripts/deploy-service.sh",
       "{workspaceRoot}/webpack.app.config.js"
     ]
   },
