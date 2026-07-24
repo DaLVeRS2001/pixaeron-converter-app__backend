@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
+import { CaptchaModule } from '@pixaeron/captcha';
 import { UserModule } from '../user/user.module';
 import { AuthResolver } from './auth.resolver';
 import { AuthService } from './auth.service';
-import { CaptchaService } from './captcha.service';
 import { GoogleAuthService } from './google-auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LoginAttemptService } from './login-attempt.service';
@@ -14,10 +14,9 @@ import { LoginAttemptService } from './login-attempt.service';
     AuthService,
     AuthResolver,
     JwtStrategy,
-    CaptchaService,
     GoogleAuthService,
     LoginAttemptService,
   ],
-  imports: [ConfigModule, PassportModule, UserModule],
+  imports: [CaptchaModule, ConfigModule, PassportModule, UserModule],
 })
 export class AuthModule {}

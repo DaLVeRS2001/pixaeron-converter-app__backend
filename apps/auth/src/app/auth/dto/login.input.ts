@@ -1,5 +1,11 @@
 import { Field, InputType } from '@pixaeron/graphql';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 @InputType()
 export class LoginInput {
@@ -19,5 +25,6 @@ export class LoginInput {
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(2048)
   captchaToken?: string;
 }

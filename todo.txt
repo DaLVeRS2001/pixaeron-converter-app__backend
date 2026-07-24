@@ -1,50 +1,28 @@
-1. Refresh session / audit trail
+# Planned work
 
-2. trust proxy
+1. Decide and provision the production email setup.
+   - Use Google Workspace for real `@pixaeron.com` mailboxes (recommended), or
+     Cloudflare Email Routing for forwarding; they must not both own the root MX.
+   - Implement Amazon SES application delivery such as
+     `no-reply@pixaeron.com -> user`; this is not implemented yet.
+3. Run throughput and multi-replica tests for shared rate limits, refresh
+   concurrency, cleanup locks, and Redis failure behavior.
 
-3. Google auth
+# Candidate topology (planned, not implemented)
 
-4. Captcha
+```text
+Lightsail Application VPS
+|- Caddy
+|- auth
+|- future API/converter services
+|- Redis
+|- future Pulsar producer
+`- future persistent CPU-limited worker
 
-5. Auth Rate Limit Service
+Managed/external PostgreSQL
 
-
-
-Global: redis cooldown
-Remove refresh if it's possible
-throughput replicas test
-
-
-Lightsail Application VPS — $24/month
-├── Nginx/Caddy
-├── auth
-├── API
-├── Redis
-├── Pulsar producer
-└── one persistent cpu-limited worker
-
-Lightsail Database VPS — $20/month
-└── PostgreSQL
-
-EC2 Auto Scaling Group
-├── min: 0
-├── desired: 0
-└── max: 5
-
-
-// Monitoring
-
-database-vps
-├── PostgreSQL
-├── node_exporter
-└── postgres_exporter
-
-application-vps
-├── Docker containers
-├── node_exporter
-└── cAdvisor
-
-Monitoring
-├── Prometheus
-├── Grafana
-└── Alertmanager
+Future EC2 Auto Scaling Group
+|- min: 0
+|- desired: 0
+`- max: 5
+```

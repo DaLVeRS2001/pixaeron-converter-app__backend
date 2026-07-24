@@ -1,13 +1,12 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { RedisToken } from '@nestjs-redis/client';
 import {
   RedisThrottlerStorage,
   ThrottlerAlgorithm,
 } from '@nestjs-redis/throttler-storage';
 import { ThrottlerModule } from '@nestjs/throttler';
-import type { RedisClientType } from 'redis';
+import { RedisToken, type RedisClientType } from '@pixaeron/redis';
 
 import { GqlThrottlerGuard } from './gql-throttler.guard';
 import { HttpRateLimitMiddleware } from './http-rate-limit.middleware';

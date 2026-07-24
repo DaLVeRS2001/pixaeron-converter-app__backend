@@ -5,10 +5,9 @@ import {
   type NestMiddleware,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRedis } from '@nestjs-redis/client';
+import { InjectRedis, type RedisClientType } from '@pixaeron/redis';
 import type { NextFunction, Request, Response } from 'express';
 import { createHmac } from 'node:crypto';
-import type { RedisClientType } from 'redis';
 
 import { RATE_LIMIT_OPTIONS } from './rate-limit.options';
 import type { RateLimitOptions } from './rate-limit.options';

@@ -36,10 +36,9 @@ testem.log
 /typings
 
 # System Files
+docs
 .DS_Store
 Thumbs.db
-docs
-
 /workspace-data/
 .nx/cache
 .nx/workspace-data
