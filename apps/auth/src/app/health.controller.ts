@@ -1,6 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { InjectRedis } from '@nestjs-redis/client';
-import type { RedisClientType } from 'redis';
+import { InjectRedis, type RedisClientType } from '@pixaeron/redis';
 
 import { PrismaService } from './prisma/prisma.service';
 

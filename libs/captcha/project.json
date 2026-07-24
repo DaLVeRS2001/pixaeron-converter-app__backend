@@ -1,0 +1,8 @@
+{
+  "name": "captcha",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/captcha/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {}
+}

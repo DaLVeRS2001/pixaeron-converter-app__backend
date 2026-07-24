@@ -1,4 +1,4 @@
-import type { RedisClientType } from 'redis';
+import type { RedisClientType } from '@pixaeron/redis';
 
 import { HealthController } from './health.controller';
 import { PrismaService } from './prisma/prisma.service';

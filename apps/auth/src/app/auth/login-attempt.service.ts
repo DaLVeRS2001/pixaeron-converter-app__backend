@@ -1,14 +1,14 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRedis } from '@nestjs-redis/client';
+import { InjectRedis, type RedisClientType } from '@pixaeron/redis';
 import { createHmac } from 'node:crypto';
 import type { Request } from 'express';
-import type { RedisClientType } from 'redis';
 
 import { SessionMetadataService } from '../session/services/session-metadata.service';
 
 const MAX_PAIR_FAILURES = 5;
 const MAX_IP_FAILURES = 25;
+const CAPTCHA_PAIR_FAILURES = 3;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const BLOCK_DURATION_MS = 15 * 60 * 1000;
 
@@ -42,24 +42,37 @@ export class LoginAttemptService {
 
   async assertAllowed(email: string, request: Request): Promise<void> {
     const { pairBlockKey, ipBlockKey } = this.getKeys(email, request);
-    const retryAfter = await Promise.all([
+    const blockTtls = await Promise.all([
       this.redis.pTTL(pairBlockKey),
       this.redis.pTTL(ipBlockKey),
     ]);
+    const retryAfterMs = Math.max(...blockTtls);
 
-    if (retryAfter.some((ttl) => ttl > 0)) {
+    if (retryAfterMs > 0) {
       throw new HttpException(
-        'Too many failed login attempts. Try again later.',
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          code: 'TOO_MANY_LOGIN_ATTEMPTS',
+          message: 'Too many failed login attempts. Try again later.',
+          retryAfter: Math.ceil(retryAfterMs / 1_000),
+        },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
   }
 
-  async recordFailure(email: string, request: Request): Promise<void> {
+  async isCaptchaRequired(email: string, request: Request): Promise<boolean> {
+    const { pairAttemptsKey } = this.getKeys(email, request);
+    const pairAttempts = Number((await this.redis.get(pairAttemptsKey)) ?? 0);
+
+    return pairAttempts >= CAPTCHA_PAIR_FAILURES;
+  }
+
+  async recordFailure(email: string, request: Request) {
     const { pairAttemptsKey, pairBlockKey, ipAttemptsKey, ipBlockKey } =
       this.getKeys(email, request);
 
-    await this.redis.eval(RECORD_FAILURE_SCRIPT, {
+    const result = (await this.redis.eval(RECORD_FAILURE_SCRIPT, {
       keys: [pairAttemptsKey, ipAttemptsKey, pairBlockKey, ipBlockKey],
       arguments: [
         String(ATTEMPT_WINDOW_MS),
@@ -67,7 +80,15 @@ export class LoginAttemptService {
         String(MAX_IP_FAILURES),
         String(BLOCK_DURATION_MS),
       ],
-    });
+    })) as [number, number];
+    const pairAttempts = Number(result[0]);
+    const ipAttempts = Number(result[1]);
+
+    return {
+      pairAttempts,
+      ipAttempts,
+      captchaRequired: pairAttempts >= CAPTCHA_PAIR_FAILURES,
+    };
   }
 
   async clear(email: string, request: Request): Promise<void> {

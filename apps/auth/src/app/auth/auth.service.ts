@@ -1,17 +1,18 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { CaptchaService } from '@pixaeron/captcha';
 import { compare } from 'bcryptjs';
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 import { SessionEventType } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionAuditService } from '../session/audit/session-audit.service';
 import { SessionService } from '../session/services/session.service';
 import { UserService } from '../user/user.service';
-import { CaptchaService } from './captcha.service';
 import { LoginInput } from './dto/login.input';
 import { RegisterInput } from './dto/register.input';
 import { GoogleLoginInput } from './dto/google-login.input';
@@ -37,25 +38,29 @@ export class AuthService {
     request: Request,
     response: Response,
   ) {
-    await this.captchaService.verify(captchaToken, request, 'login');
-
     const normalizedEmail = email.trim().toLowerCase();
     await this.loginAttemptService.assertAllowed(normalizedEmail, request);
+
+    if (
+      this.captchaService.isEnabled() &&
+      (await this.loginAttemptService.isCaptchaRequired(
+        normalizedEmail,
+        request,
+      ))
+    ) {
+      await this.requireCaptcha(captchaToken, request, 'login');
+    }
 
     const user = await this.userService.getUser({ email: normalizedEmail });
 
     if (!user?.password) {
-      await this.loginAttemptService.recordFailure(normalizedEmail, request);
-      await this.logFailedLogin(request, user?.id);
-      throw new UnauthorizedException(this.invalidCredentialsMessage);
+      return this.rejectInvalidCredentials(normalizedEmail, request, user?.id);
     }
 
     const isPasswordValid = await compare(password, user.password);
 
     if (!isPasswordValid) {
-      await this.loginAttemptService.recordFailure(normalizedEmail, request);
-      await this.logFailedLogin(request, user.id);
-      throw new UnauthorizedException(this.invalidCredentialsMessage);
+      return this.rejectInvalidCredentials(normalizedEmail, request, user.id);
     }
 
     await this.loginAttemptService.clear(normalizedEmail, request);
@@ -80,7 +85,7 @@ export class AuthService {
     request: Request,
     response: Response,
   ) {
-    await this.captchaService.verify(captchaToken, request, 'register');
+    await this.requireCaptcha(captchaToken, request, 'register');
 
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -110,7 +115,7 @@ export class AuthService {
     request: Request,
     response: Response,
   ) {
-    await this.captchaService.verify(captchaToken, request, 'google_login');
+    await this.requireCaptcha(captchaToken, request, 'google_login');
 
     const googleUser = await this.googleAuthService.verifyIdToken(idToken);
 
@@ -187,5 +192,48 @@ export class AuthService {
 
   private async logFailedLogin(request: Request, userId?: number) {
     await this.sessionAuditService.recordLoginFailed(request, userId);
+  }
+
+  private async rejectInvalidCredentials(
+    normalizedEmail: string,
+    request: Request,
+    userId?: number,
+  ): Promise<never> {
+    const attempt = await this.loginAttemptService.recordFailure(
+      normalizedEmail,
+      request,
+    );
+    await this.logFailedLogin(request, userId);
+
+    // Return the block on the threshold-crossing request, not only the next one.
+    await this.loginAttemptService.assertAllowed(normalizedEmail, request);
+
+    if (this.captchaService.isEnabled() && attempt.captchaRequired) {
+      throw new BadRequestException({
+        code: 'CAPTCHA_REQUIRED',
+        action: 'login',
+        message: 'Captcha verification is required',
+      });
+    }
+
+    throw new UnauthorizedException(this.invalidCredentialsMessage);
+  }
+
+  private async requireCaptcha(
+    token: string | undefined,
+    request: Request,
+    action: string,
+  ): Promise<void> {
+    if (!this.captchaService.isEnabled()) return;
+
+    if (!token) {
+      throw new BadRequestException({
+        code: 'CAPTCHA_REQUIRED',
+        action,
+        message: 'Captcha verification is required',
+      });
+    }
+
+    await this.captchaService.verify(token, request, action);
   }
 }

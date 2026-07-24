@@ -8,6 +8,7 @@ import { LoginAttemptService } from './login-attempt.service';
 describe('LoginAttemptService', () => {
   const redis = {
     pTTL: jest.fn(),
+    get: jest.fn(),
     eval: jest.fn(),
     del: jest.fn(),
   };
@@ -37,9 +38,15 @@ describe('LoginAttemptService', () => {
   });
 
   it('records a failure atomically with expiry and block arguments', async () => {
-    redis.eval.mockResolvedValue(1);
+    redis.eval.mockResolvedValue([1, 1]);
 
-    await service.recordFailure('user@example.com', request);
+    await expect(
+      service.recordFailure('user@example.com', request),
+    ).resolves.toEqual({
+      pairAttempts: 1,
+      ipAttempts: 1,
+      captchaRequired: false,
+    });
 
     expect(redis.eval).toHaveBeenCalledWith(
       expect.any(String),
@@ -55,6 +62,27 @@ describe('LoginAttemptService', () => {
     );
   });
 
+  it('requires captcha after three pair failures', async () => {
+    redis.get.mockResolvedValue('3');
+
+    await expect(
+      service.isCaptchaRequired('user@example.com', request),
+    ).resolves.toBe(true);
+  });
+
+  it('returns a stable block code and retry delay', async () => {
+    redis.pTTL.mockResolvedValueOnce(30_001).mockResolvedValueOnce(-2);
+
+    await expect(
+      service.assertAllowed('user@example.com', request),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'TOO_MANY_LOGIN_ATTEMPTS',
+        retryAfter: 31,
+      }),
+    });
+  });
+
   it('clears only the IP and email pair after a successful login', async () => {
     await service.clear('user@example.com', request);
 
@@ -65,6 +93,7 @@ describe('LoginAttemptService', () => {
   });
 
   it('uses a separate pair key for the same email from another IP', async () => {
+    redis.eval.mockResolvedValue([1, 1]);
     sessionMetadataService.getFromRequest
       .mockReturnValueOnce({ ipHash: 'first-ip' })
       .mockReturnValueOnce({ ipHash: 'second-ip' });

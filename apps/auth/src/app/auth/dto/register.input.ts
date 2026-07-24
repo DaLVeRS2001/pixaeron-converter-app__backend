@@ -33,5 +33,6 @@ export class RegisterInput {
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
+  @MaxLength(2048)
   captchaToken?: string;
 }

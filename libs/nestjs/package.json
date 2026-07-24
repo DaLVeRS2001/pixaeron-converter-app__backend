@@ -2,10 +2,17 @@
   "name": "@pixaeron/nestjs",
   "version": "0.0.0",
   "dependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/config": "^4.0.4",
     "cookie-parser": "^1.4.7",
     "tslib": "^2.3.0"
   },
-  "devDependencies": {}
+  "peerDependencies": {
+    "@nestjs/common": "11.x",
+    "@nestjs/config": "4.x",
+    "class-transformer": "0.5.x",
+    "class-validator": "0.15.x"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "1.4.10",
+    "@types/express": "4.17.25"
+  }
 }

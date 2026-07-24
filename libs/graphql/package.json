@@ -2,12 +2,16 @@
   "name": "@pixaeron/graphql",
   "version": "0.0.0",
   "dependencies": {
-    "@apollo/server": "^5.5.0",
-    "@as-integrations/express5": "^1.1.2",
     "@nestjs/apollo": "^13.4.2",
     "@nestjs/graphql": "^13.4.2",
-    "graphql": "^16.14.2",
-    "graphql-scalars": "^1.25.0"
+    "tslib": "2.x"
   },
-  "devDependencies": {}
+  "peerDependencies": {
+    "@apollo/server": "5.x",
+    "@as-integrations/express5": "1.x",
+    "@nestjs/common": "11.x",
+    "@nestjs/core": "11.x",
+    "graphql": "16.x",
+    "reflect-metadata": "0.2.x"
+  }
 }

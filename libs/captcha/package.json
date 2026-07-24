@@ -1,0 +1,12 @@
+{
+  "name": "@pixaeron/captcha",
+  "version": "0.0.0",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "tslib": "^2.3.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "11.x",
+    "@nestjs/config": "4.x"
+  }
+}
