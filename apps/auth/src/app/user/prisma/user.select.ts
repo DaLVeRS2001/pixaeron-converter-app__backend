@@ -4,6 +4,7 @@ export const authenticatedUserSelect = {
   id: true,
   email: true,
   username: true,
+  emailVerified: true,
   planCode: true,
   createdAt: true,
   updatedAt: true,

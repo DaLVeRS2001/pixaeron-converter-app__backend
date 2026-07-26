@@ -28,6 +28,22 @@ enum SessionEventType {
   LOGIN_SUCCESS
   LOGIN_FAILED
   REGISTER_SUCCESS
+  EMAIL_VERIFICATION_REQUESTED
+  EMAIL_VERIFICATION_SENT
+  EMAIL_VERIFICATION_ACCEPTED
+  EMAIL_VERIFICATION_FAILED
+  EMAIL_VERIFIED
+  EMAIL_VERIFICATION_INVALID
+  EMAIL_VERIFICATION_EXPIRED
+  EMAIL_ALREADY_VERIFIED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_SENT
+  PASSWORD_RESET_ACCEPTED
+  PASSWORD_RESET_FAILED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_RESET_INVALID
+  PASSWORD_RESET_EXPIRED
+  PASSWORD_RESET_REUSED
   REFRESH_SUCCESS
   REFRESH_FAILED
   REFRESH_REUSE_DETECTED
@@ -39,18 +55,49 @@ enum SessionEventType {
   SUSPICIOUS_USER_AGENT
 }
 
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 model User {
-  id            Int            @id @default(autoincrement())
-  email         String         @unique
-  password      String?
-  username      String
-  emailVerified Boolean        @default(false) @map("email_verified")
-  planCode      PlanCode       @default(FREE) @map("plan_code")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  accounts      Account[]
-  sessions      Session[]
-  sessionEvents SessionEvent[]
+  id                     Int            @id @default(autoincrement())
+  email                  String         @unique
+  password               String?
+  username               String
+  emailVerified          Boolean        @default(false) @map("email_verified")
+  planCode               PlanCode       @default(FREE) @map("plan_code")
+  legalConsentVersion    String?        @map("legal_consent_version")
+  legalConsentAcceptedAt DateTime?      @map("legal_consent_accepted_at")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+  accounts               Account[]
+  authTokens             AuthToken[]
+  sessions               Session[]
+  sessionEvents          SessionEvent[]
+}
+
+// The partial unique index auth_tokens_one_active_per_user_type is maintained by SQL migration.
+model AuthToken {
+  id String @id @default(uuid())
+
+  userId Int @map("user_id")
+
+  type AuthTokenType
+
+  tokenHash String @unique @map("token_hash")
+
+  expiresAt DateTime @map("expires_at")
+
+  consumedAt DateTime? @map("consumed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("auth_tokens")
 }
 
 model Account {

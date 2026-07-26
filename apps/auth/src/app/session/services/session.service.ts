@@ -171,7 +171,35 @@ export class SessionService {
     }
 
     const nextRefreshSecret = this.sessionTokenService.generateRefreshSecret();
+    const nextRefreshTokenHash =
+      await this.sessionTokenService.hashRefreshSecret(nextRefreshSecret);
     const requestMetadata = this.sessionMetadataService.getFromRequest(request);
+    const rotated = await this.prisma.session.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: session.refreshTokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: {
+        refreshTokenHash: nextRefreshTokenHash,
+        lastUsedAt: now,
+        rotatedAt: now,
+        userAgent: requestMetadata.userAgent,
+        ipHash: requestMetadata.ipHash,
+      },
+    });
+
+    if (rotated.count !== 1) {
+      await this.sessionAuditService.recordRefreshFailed(
+        session.id,
+        session.userId,
+        request,
+        'concurrent_refresh_rotation',
+      );
+      this.sessionCookieService.clearAuthCookies(response);
+      throw new UnauthorizedException();
+    }
 
     await this.sessionRiskAuditService.recordRefreshMetadataChanges({
       sessionId: session.id,
@@ -180,18 +208,6 @@ export class SessionService {
       previousUserAgent: session.userAgent,
       currentMetadata: requestMetadata,
       request,
-    });
-
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: {
-        refreshTokenHash:
-          await this.sessionTokenService.hashRefreshSecret(nextRefreshSecret),
-        lastUsedAt: now,
-        rotatedAt: now,
-        userAgent: requestMetadata.userAgent,
-        ipHash: requestMetadata.ipHash,
-      },
     });
 
     await this.sessionAuditService.recordRefreshSuccess(
@@ -212,6 +228,20 @@ export class SessionService {
     if (!user) throw new UnauthorizedException();
 
     return user;
+  }
+
+  async completePasswordChange(
+    userId: number,
+    request: Request,
+    response: Response,
+    revokedSessions: number,
+  ): Promise<void> {
+    await this.sessionAuditService.recordPasswordChanged(
+      userId,
+      request,
+      revokedSessions,
+    );
+    this.sessionCookieService.clearAuthCookies(response);
   }
 
   async logout(request: Request, response: Response): Promise<boolean> {

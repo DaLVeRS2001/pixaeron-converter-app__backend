@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2021",
+    "types": ["node"]
+  },
+  "include": [
+    "export-auth-schema.ts",
+    "../../apps/auth/src/**/*.ts",
+    "../../libs/**/*.ts"
+  ],
+  "exclude": ["../../apps/auth/src/**/*.spec.ts", "../../libs/**/*.spec.ts"],
+  "ts-node": {
+    "experimentalResolver": true
+  }
+}

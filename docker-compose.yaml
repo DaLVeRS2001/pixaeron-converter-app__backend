@@ -25,12 +25,13 @@ services:
       - apps/auth/.env
     environment:
       NODE_ENV: development
+      PORT: 3000
       REDIS_URL: redis://redis:6379
     command: >-
       sh -c "./node_modules/.bin/prisma migrate deploy
       --config apps/auth/prisma.config.ts && node main.js"
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3001:3000'
     depends_on:
       postgres:
         condition: service_healthy

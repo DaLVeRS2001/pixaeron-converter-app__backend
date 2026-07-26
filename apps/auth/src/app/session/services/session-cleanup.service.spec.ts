@@ -2,6 +2,7 @@ import { SessionCleanupService } from './session-cleanup.service';
 
 describe('SessionCleanupService', () => {
   const prisma = {
+    authToken: { deleteMany: jest.fn() },
     session: { deleteMany: jest.fn() },
     sessionEvent: { deleteMany: jest.fn() },
   };
@@ -21,6 +22,7 @@ describe('SessionCleanupService', () => {
 
     await service.deleteExpiredAuthSessionsAndEvents();
 
+    expect(prisma.authToken.deleteMany).not.toHaveBeenCalled();
     expect(prisma.session.deleteMany).not.toHaveBeenCalled();
     expect(prisma.sessionEvent.deleteMany).not.toHaveBeenCalled();
     expect(redisLockService.release).not.toHaveBeenCalled();
@@ -31,6 +33,7 @@ describe('SessionCleanupService', () => {
 
     await service.deleteExpiredAuthSessionsAndEvents();
 
+    expect(prisma.authToken.deleteMany).toHaveBeenCalledTimes(1);
     expect(prisma.session.deleteMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionEvent.deleteMany).toHaveBeenCalledTimes(1);
     expect(redisLockService.release).toHaveBeenCalledWith(

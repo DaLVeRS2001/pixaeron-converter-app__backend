@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { GraphQLModule } from '@pixaeron/graphql';
-import { ApolloDriver, ApolloDriverConfig } from '@pixaeron/graphql';
+import {
+  ApolloDriver,
+  ApolloDriverConfig,
+  GraphQLModule,
+} from '@pixaeron/graphql';
 import { RateLimitModule } from '@pixaeron/rate-limit';
 import { RedisInfrastructureModule } from '@pixaeron/redis';
 import { AuthModule } from './auth/auth.module';
@@ -15,10 +18,15 @@ import {
   AUTH_GQL_RATE_LIMITS,
   AUTH_HTTP_RATE_LIMITS,
 } from './rate-limit/rate-limit.constants';
+import { formatAuthGraphQLError } from './graphql-error-contract';
+import { validateAuthEnvironment } from './config/auth-environment.validator';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateAuthEnvironment,
+    }),
     RedisInfrastructureModule.forRoot('auth'),
     RateLimitModule.forRoot({
       namespace: 'auth',
@@ -33,7 +41,9 @@ import {
       driver: ApolloDriver,
       graphiql: process.env.NODE_ENV !== 'production',
       autoSchemaFile: true,
+      sortSchema: true,
       path: 'auth',
+      formatError: formatAuthGraphQLError,
       playground:
         process.env.NODE_ENV !== 'production'
           ? {

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
 
@@ -15,21 +15,28 @@ export class GoogleAuthService {
 
   async verifyIdToken(idToken: string): Promise<GoogleUserProfile> {
     const clientId = this.configService.getOrThrow('GOOGLE_CLIENT_ID');
-    const ticket = await new OAuth2Client(clientId).verifyIdToken({
-      idToken,
-      audience: clientId,
-    });
-    const payload = ticket.getPayload();
+    try {
+      const ticket = await new OAuth2Client(clientId).verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
+      const payload = ticket.getPayload();
 
-    if (!payload?.sub || !payload.email) {
-      throw new BadRequestException('Invalid Google token payload');
+      if (!payload?.sub || !payload.email) {
+        throw new Error('Google token payload is incomplete');
+      }
+
+      return {
+        providerAccountId: payload.sub,
+        email: payload.email.toLowerCase(),
+        emailVerified: payload.email_verified === true,
+        username: payload.name || payload.email.split('@')[0],
+      };
+    } catch {
+      throw new UnauthorizedException({
+        code: 'GOOGLE_TOKEN_INVALID',
+        message: 'Google sign-in token is invalid or expired',
+      });
     }
-
-    return {
-      providerAccountId: payload.sub,
-      email: payload.email.toLowerCase(),
-      emailVerified: payload.email_verified === true,
-      username: payload.name || payload.email.split('@')[0],
-    };
   }
 }

@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'crypto';
 import type { Request } from 'express';
 
+const MAX_USER_AGENT_LENGTH = 512;
+
 export interface SessionRequestMetadata {
   ipHash: string | null;
   userAgent: string | null;
@@ -28,9 +30,9 @@ export class SessionMetadataService {
   private getUserAgent(request: Request): string | null {
     const userAgent = request.headers['user-agent'];
 
-    return Array.isArray(userAgent)
-      ? (userAgent[0] ?? null)
-      : (userAgent ?? null);
+    const value = Array.isArray(userAgent) ? userAgent[0] : userAgent;
+
+    return value ? value.slice(0, MAX_USER_AGENT_LENGTH) : null;
   }
 
   private hashIp(ip: string): string {

@@ -6,12 +6,20 @@ export {
   Field,
   GqlExecutionContext,
   GraphQLModule,
+  GraphQLSchemaBuilderModule,
+  GraphQLSchemaFactory,
   ID,
   InputType,
   Int,
   Mutation,
   ObjectType,
   Query,
+  registerEnumType,
   Resolver,
 } from '@nestjs/graphql';
+export {
+  createGraphQLErrorFormatter,
+  formatGraphQLError,
+} from './lib/format-graphql-error';
+export type { GraphQLErrorFormatterOptions } from './lib/format-graphql-error';
 export * from './lib/models';

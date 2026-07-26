@@ -12,6 +12,7 @@ export class GoogleLoginInput {
   @Field()
   @IsNotEmpty()
   @IsString()
+  @MaxLength(8192)
   idToken!: string;
 
   @Field(() => Boolean, { nullable: true })
@@ -24,4 +25,15 @@ export class GoogleLoginInput {
   @IsString()
   @MaxLength(2048)
   captchaToken?: string;
+
+  @Field(() => Boolean, { nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  legalConsentAccepted?: boolean;
+
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  legalConsentVersion?: string;
 }

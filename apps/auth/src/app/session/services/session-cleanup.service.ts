@@ -31,8 +31,18 @@ export class SessionCleanupService {
 
   private async deleteExpiredData() {
     const now = Date.now();
+    const authTokenCutoff = new Date(now - 7 * DAY_MS);
     const sessionCutoff = new Date(now - 30 * DAY_MS);
     const eventCutoff = new Date(now - 90 * DAY_MS);
+
+    await this.prisma.authToken.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: authTokenCutoff } },
+          { consumedAt: { lt: authTokenCutoff } },
+        ],
+      },
+    });
 
     await this.prisma.session.deleteMany({
       where: {

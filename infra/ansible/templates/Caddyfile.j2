@@ -16,6 +16,17 @@
 		respond "Not Found" 404
 	}
 
+	@graphql {
+		host {{ api_domain }}
+		path /graphql /graphql/
+	}
+	handle @graphql {
+		rewrite * /auth
+		reverse_proxy 127.0.0.1:3000 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
 	@auth {
 		host {{ api_domain }}
 		path /auth /auth/*
