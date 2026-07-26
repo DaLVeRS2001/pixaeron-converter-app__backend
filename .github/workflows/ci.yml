@@ -25,7 +25,7 @@ jobs:
       contents: read
       id-token: write
       packages: write
-    uses: DaLVeRS2001/ci/.github/workflows/pixaeron.yml@432da806d410aab615d99be31b49ce1650e6041e
+    uses: DaLVeRS2001/ci/.github/workflows/pixaeron.yml@3aa6c5b77e1effdd1f4aac29c5d2118265d513f8
     with:
       service: ${{ inputs.service || 'all' }}
     secrets:
