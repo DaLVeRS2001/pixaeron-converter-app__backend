@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
 import { hash } from 'bcryptjs';
+
 import { Prisma } from '../../generated/prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { authenticatedUserSelect } from './prisma/user.select';
+
+const PASSWORD_HASH_ROUNDS = 12;
 
 @Injectable()
 export class UserService {
@@ -12,9 +15,15 @@ export class UserService {
     return this.prisma.user.create({
       data: {
         ...data,
-        password: data.password ? await hash(data.password, 10) : null,
+        password: data.password
+          ? await this.hashPassword(data.password as string)
+          : null,
       },
     });
+  }
+
+  hashPassword(password: string): Promise<string> {
+    return hash(password, PASSWORD_HASH_ROUNDS);
   }
 
   async getUser(args: Prisma.UserWhereUniqueInput) {

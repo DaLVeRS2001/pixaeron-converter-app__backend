@@ -8,4 +8,7 @@ export class User extends AbstractModel {
 
   @Field()
   username!: string;
+
+  @Field()
+  emailVerified!: boolean;
 }

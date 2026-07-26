@@ -23,6 +23,28 @@ export class SessionAuditService {
     return this.createEvent({ type, sessionId, userId, request });
   }
 
+  recordSecurityEvent(
+    type: SessionEventType,
+    request: Request,
+    userId?: number,
+    metadata?: Prisma.InputJsonObject,
+  ) {
+    return this.createEvent({ type, request, userId, metadata });
+  }
+
+  recordPasswordChanged(
+    userId: number,
+    request: Request,
+    revokedSessions: number,
+  ) {
+    return this.createEvent({
+      type: SessionEventType.PASSWORD_CHANGED,
+      userId,
+      request,
+      metadata: { revokedSessions },
+    });
+  }
+
   recordLoginFailed(request: Request, userId?: number) {
     return this.createEvent({
       type: SessionEventType.LOGIN_FAILED,

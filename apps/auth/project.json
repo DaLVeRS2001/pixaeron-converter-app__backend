@@ -6,7 +6,7 @@
   "tags": [],
   "targets": {
     "build": {
-      "dependsOn": ["prisma-generate", "^build"],
+      "dependsOn": ["schema-check", "^build"],
       "executor": "nx:run-commands",
       "options": {
         "command": "webpack-cli build",
@@ -118,6 +118,22 @@
       "options": {
         "cwd": "{projectRoot}"
       }
+    },
+    "schema-check": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*.ts",
+        "{workspaceRoot}/libs/graphql/src/**/*.ts",
+        "{workspaceRoot}/tools/graphql/export-auth-schema.ts",
+        "{projectRoot}/schema.graphql",
+        "{workspaceRoot}/package-lock.json"
+      ],
+      "options": {
+        "command": "npm run schema:check:auth",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["prisma-generate"]
     }
   }
 }

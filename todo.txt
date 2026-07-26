@@ -1,26 +1,61 @@
 # Planned work
 
-1. Decide and provision the production email setup.
+1. Complete and verify the production email setup.
    - Use Google Workspace for real `@pixaeron.com` mailboxes (recommended), or
      Cloudflare Email Routing for forwarding; they must not both own the root MX.
-   - Implement Amazon SES application delivery such as
-     `no-reply@pixaeron.com -> user`; this is not implemented yet.
+   - Finish SES production access, runtime authorization, custom MAIL FROM,
+     bounce/complaint notifications, and end-to-end delivery tests for the
+     implemented `no-reply@pixaeron.com -> user` adapter.
+2. Implement SES deliverability audit and automated feedback processing.
+   - Connect the existing SNS feedback topic to a durable SQS consumer or
+     equivalent worker; do not process delivery state only through email.
+   - Add a transactional outbox so account/token/session state and required audit
+     events cannot diverge; dispatch email asynchronously and idempotently to reduce
+     known-versus-unknown account timing differences.
+   - Handle and deduplicate hard-bounce and complaint events by SES message ID.
+   - Associate events with the user and outbound message without storing email
+     bodies, raw security tokens, or unnecessary recipient PII in audit metadata.
+   - Track accepted, bounced, complained, and suppressed delivery state for the
+     future admin/audit UI.
+   - Keep account lifecycle, email verification, and destination delivery state
+     independent; a complaint stops email but does not disable the account.
+   - Stop application retries for bounced/complained recipients and require an
+     explicit reviewed administrative flow before removing SES suppression.
+   - Add pending-account expiry, a signed `This wasn't me` cancellation flow,
+     and verified recovery for legitimate owners of suppressed addresses.
+   - Add retention, access-control, metrics, alerting, replay, and failure-path
+     tests before calling the audit production-ready.
 3. Run throughput and multi-replica tests for shared rate limits, refresh
    concurrency, cleanup locks, and Redis failure behavior.
+
+4. Complete the Google Sign-In production release gates.
+   - Publish the production Google Auth Platform audience only after the
+     homepage, `/privacy`, and `/terms` are public over HTTPS.
+   - Obtain owner/legal/privacy approval for the public policy text and confirm
+     that `support@pixaeron.com` is monitored.
+   - Verify `pixaeron.com` ownership, branding, authorized JavaScript origins,
+     minimal scopes, and matching frontend/backend production client IDs.
+   - Add and test the final static-host CSP/COOP policy with Google Identity
+     Services and Cloudflare Turnstile before enforcing it.
+   - Run fresh-browser negative-path tests for blocked/failed Google SDK load,
+     wrong audience, expired token, account-link-required, CAPTCHA retry, and
+     a non-test Google account.
+5. Publish the frontend CI and complete the first Cloudflare deployment.
+   - Push central CI commit `85e3285023f9e3d5ec6965269380f56ee94b320b`
+     before the frontend caller that pins it.
+   - Keep public frontend build values as repository variables. Store the
+     Cloudflare account ID as a `production` environment variable and the
+     deployment token only as a protected `production` environment secret.
+     The repository-local deploy job consumes the central verified-build artifact.
+   - Deploy `pixaeron-web`, test its Workers preview URL, bind the production
+     domain, and verify SPA refresh, Google, Turnstile, cookies, and CORS.
+6. Local migration deploy and token/concurrency tests are complete. Before production,
+   take a backup, review all three auth migrations, deploy them before the new image,
+   and verify the database constraint/index state after rollout.
 
 # Candidate topology (planned, not implemented)
 
 ```text
-Lightsail Application VPS
-|- Caddy
-|- auth
-|- future API/converter services
-|- Redis
-|- future Pulsar producer
-`- future persistent CPU-limited worker
-
-Managed/external PostgreSQL
-
 Future EC2 Auto Scaling Group
 |- min: 0
 |- desired: 0

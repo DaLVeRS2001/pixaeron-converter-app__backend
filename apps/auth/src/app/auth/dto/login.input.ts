@@ -1,7 +1,8 @@
 import { Field, InputType } from '@pixaeron/graphql';
 import {
   IsBoolean,
-  IsNotEmpty,
+  IsByteLength,
+  IsEmail,
   IsOptional,
   IsString,
   MaxLength,
@@ -10,11 +11,13 @@ import {
 @InputType()
 export class LoginInput {
   @Field()
-  @IsNotEmpty()
+  @IsEmail()
+  @MaxLength(254)
   email!: string;
 
   @Field()
-  @IsNotEmpty()
+  @IsString()
+  @IsByteLength(1, 72)
   password!: string;
 
   @Field(() => Boolean, { nullable: true })

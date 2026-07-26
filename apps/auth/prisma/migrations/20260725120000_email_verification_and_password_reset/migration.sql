@@ -1,0 +1,35 @@
+CREATE TYPE "AuthTokenType" AS ENUM ('EMAIL_VERIFICATION', 'PASSWORD_RESET');
+
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_VERIFICATION_REQUESTED';
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_VERIFICATION_SENT';
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_VERIFICATION_FAILED';
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_VERIFIED';
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_VERIFICATION_INVALID';
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_VERIFICATION_EXPIRED';
+ALTER TYPE "SessionEventType" ADD VALUE 'EMAIL_ALREADY_VERIFIED';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_REQUESTED';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_SENT';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_FAILED';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_COMPLETED';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_INVALID';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_EXPIRED';
+ALTER TYPE "SessionEventType" ADD VALUE 'PASSWORD_RESET_REUSED';
+
+CREATE TABLE "auth_tokens" (
+    "id" UUID NOT NULL,
+    "user_id" INTEGER NOT NULL,
+    "type" "AuthTokenType" NOT NULL,
+    "token_hash" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "consumed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "auth_tokens_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "auth_tokens_token_hash_key" ON "auth_tokens"("token_hash");
+CREATE INDEX "auth_tokens_user_id_type_idx" ON "auth_tokens"("user_id", "type");
+CREATE INDEX "auth_tokens_expires_at_idx" ON "auth_tokens"("expires_at");
+
+ALTER TABLE "auth_tokens" ADD CONSTRAINT "auth_tokens_user_id_fkey"
+FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

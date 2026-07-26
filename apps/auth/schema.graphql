@@ -1,0 +1,94 @@
+# GENERATED FILE. DO NOT EDIT MANUALLY.
+# Source of truth: NestJS code-first resolvers and models in apps/auth.
+
+type AuthRequestResult {
+  accepted: Boolean!
+}
+
+input AuthTokenInput {
+  token: String!
+}
+
+input EmailActionInput {
+  captchaToken: String
+  email: String!
+}
+
+type EmailVerificationResult {
+  status: EmailVerificationStatus!
+}
+
+enum EmailVerificationStatus {
+  ALREADY_VERIFIED
+  EXPIRED
+  INVALID
+  VERIFIED
+}
+
+input GoogleLoginInput {
+  captchaToken: String
+  idToken: String!
+  legalConsentAccepted: Boolean
+  legalConsentVersion: String
+  rememberMe: Boolean
+}
+
+input LoginInput {
+  captchaToken: String
+  email: String!
+  password: String!
+  rememberMe: Boolean
+}
+
+type Mutation {
+  googleLogin(googleLoginInput: GoogleLoginInput!): User!
+  login(loginInput: LoginInput!): User!
+  logout: Boolean!
+  logoutAll: Boolean!
+  register(registerInput: RegisterInput!): RegistrationResult!
+  requestPasswordReset(input: EmailActionInput!): AuthRequestResult!
+  resendEmailVerification(input: EmailActionInput!): AuthRequestResult!
+  resetPassword(input: ResetPasswordInput!): PasswordResetResult!
+  verifyEmail(input: AuthTokenInput!): EmailVerificationResult!
+}
+
+type PasswordResetResult {
+  status: PasswordResetStatus!
+}
+
+enum PasswordResetStatus {
+  ALREADY_USED
+  EXPIRED
+  INVALID
+  RESET
+}
+
+type Query {
+  me: User!
+}
+
+input RegisterInput {
+  captchaToken: String
+  email: String!
+  legalConsentAccepted: Boolean
+  legalConsentVersion: String
+  password: String!
+  username: String!
+}
+
+type RegistrationResult {
+  accepted: Boolean!
+  email: String!
+}
+
+input ResetPasswordInput {
+  password: String!
+  token: String!
+}
+
+type User {
+  email: String!
+  emailVerified: Boolean!
+  id: ID!
+  username: String!
+}
