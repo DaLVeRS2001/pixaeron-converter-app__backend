@@ -125,7 +125,7 @@
       "inputs": [
         "{projectRoot}/src/**/*.ts",
         "{workspaceRoot}/libs/graphql/src/**/*.ts",
-        "{workspaceRoot}/tools/graphql/export-auth-schema.ts",
+        "{projectRoot}/scripts/export-schema.ts",
         "{projectRoot}/schema.graphql",
         "{workspaceRoot}/package-lock.json"
       ],

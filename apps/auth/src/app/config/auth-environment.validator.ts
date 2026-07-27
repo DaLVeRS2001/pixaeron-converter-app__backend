@@ -194,6 +194,7 @@ export function validateAuthEnvironment(config: Environment): Environment {
     31_536_000_000,
     errors,
   );
+  validateInteger(config, 'PASSWORD_HASH_ROUNDS', 10, 15, errors);
   validateInteger(config, 'REFRESH_TOKEN_HASH_ROUNDS', 10, 15, errors);
 
   if (

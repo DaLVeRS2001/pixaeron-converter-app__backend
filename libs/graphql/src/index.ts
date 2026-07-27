@@ -17,9 +17,5 @@ export {
   registerEnumType,
   Resolver,
 } from '@nestjs/graphql';
-export {
-  createGraphQLErrorFormatter,
-  formatGraphQLError,
-} from './lib/format-graphql-error';
-export type { GraphQLErrorFormatterOptions } from './lib/format-graphql-error';
+export { createGraphQLErrorFormatter } from './lib/format-graphql-error';
 export * from './lib/models';

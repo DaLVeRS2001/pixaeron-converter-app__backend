@@ -4,7 +4,9 @@ import { JwtService } from '@nestjs/jwt';
 import { hash } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 
-import { TokenPayload } from '../../auth/interfaces/token-payload.interface';
+interface AccessTokenPayload {
+  userId: number;
+}
 
 @Injectable()
 export class SessionTokenService {
@@ -14,14 +16,19 @@ export class SessionTokenService {
   ) {}
 
   signAccessToken(userId: number): string {
-    return this.jwtService.sign({ userId } satisfies TokenPayload);
+    return this.jwtService.sign({ userId } satisfies AccessTokenPayload);
   }
 
-  async verifyAccessToken(accessToken: string): Promise<TokenPayload | null> {
+  async verifyAccessToken(
+    accessToken: string,
+  ): Promise<AccessTokenPayload | null> {
     try {
-      return await this.jwtService.verifyAsync<TokenPayload>(accessToken, {
-        secret: this.configService.getOrThrow('JWT_SECRET'),
-      });
+      return await this.jwtService.verifyAsync<AccessTokenPayload>(
+        accessToken,
+        {
+          secret: this.configService.getOrThrow('JWT_SECRET'),
+        },
+      );
     } catch {
       return null;
     }

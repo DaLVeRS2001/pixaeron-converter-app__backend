@@ -2,7 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 
-import type { SessionMetadataService } from '../session/services/session-metadata.service';
+import type { SessionMetadataService } from '../../session/services/session-metadata.service';
 import { LoginAttemptService } from './login-attempt.service';
 
 describe('LoginAttemptService', () => {

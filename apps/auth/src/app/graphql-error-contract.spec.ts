@@ -155,6 +155,23 @@ describe('GraphQL error contract', () => {
     },
   );
 
+  it('returns a safe BAD_USER_INPUT for variable coercion errors', () => {
+    const message = 'Variable "$email" got invalid value 123';
+    const code = 'BAD_USER_INPUT';
+
+    const result = formatAuthGraphQLError(
+      {
+        message,
+        extensions: { code, stacktrace: ['private stack'] },
+      },
+      new GraphQLError(message, { extensions: { code } }),
+    );
+
+    expect(result).toEqual({
+      message: 'Bad request',
+      extensions: { code },
+    });
+  });
   it('masks an unknown HttpException code, message, and metadata', () => {
     const exception = new BadRequestException({
       code: 'INTERNAL_VALIDATION_DETAIL',

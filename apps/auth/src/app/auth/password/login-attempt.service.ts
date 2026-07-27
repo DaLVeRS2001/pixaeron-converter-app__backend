@@ -4,7 +4,7 @@ import { InjectRedis, type RedisClientType } from '@pixaeron/redis';
 import { createHmac } from 'node:crypto';
 import type { Request } from 'express';
 
-import { SessionMetadataService } from '../session/services/session-metadata.service';
+import { SessionMetadataService } from '../../session/services/session-metadata.service';
 
 const MAX_PAIR_FAILURES = 5;
 const MAX_IP_FAILURES = 25;

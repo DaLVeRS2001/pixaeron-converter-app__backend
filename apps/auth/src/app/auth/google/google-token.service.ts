@@ -2,7 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
 
-export interface GoogleUserProfile {
+import { normalizeEmail } from '../helpers/normalize-email';
+
+interface GoogleUserProfile {
   providerAccountId: string;
   email: string;
   emailVerified: boolean;
@@ -10,15 +12,20 @@ export interface GoogleUserProfile {
 }
 
 @Injectable()
-export class GoogleAuthService {
-  constructor(private readonly configService: ConfigService) {}
+export class GoogleTokenService {
+  private readonly clientId: string;
+  private readonly client: OAuth2Client;
+
+  constructor(configService: ConfigService) {
+    this.clientId = configService.getOrThrow('GOOGLE_CLIENT_ID');
+    this.client = new OAuth2Client(this.clientId);
+  }
 
   async verifyIdToken(idToken: string): Promise<GoogleUserProfile> {
-    const clientId = this.configService.getOrThrow('GOOGLE_CLIENT_ID');
     try {
-      const ticket = await new OAuth2Client(clientId).verifyIdToken({
+      const ticket = await this.client.verifyIdToken({
         idToken,
-        audience: clientId,
+        audience: this.clientId,
       });
       const payload = ticket.getPayload();
 
@@ -26,11 +33,17 @@ export class GoogleAuthService {
         throw new Error('Google token payload is incomplete');
       }
 
+      const email = normalizeEmail(payload.email);
+      const username = (payload.name?.trim() || email.split('@')[0])
+        .replace(/\s+/g, ' ')
+        .slice(0, 32)
+        .trim();
+
       return {
         providerAccountId: payload.sub,
-        email: payload.email.toLowerCase(),
+        email,
         emailVerified: payload.email_verified === true,
-        username: payload.name || payload.email.split('@')[0],
+        username: username.length >= 3 ? username : 'Google user',
       };
     } catch {
       throw new UnauthorizedException({

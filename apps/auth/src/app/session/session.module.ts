@@ -1,9 +1,8 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 
 import { SessionAuditService } from './audit/session-audit.service';
-import { SessionRiskAuditService } from './audit/session-risk-audit.service';
 import { GqlSessionAuthGuard } from './guards/gql-session-auth.guard';
 import { SessionCleanupService } from './services/session-cleanup.service';
 import { SessionCookieService } from './services/session-cookie.service';
@@ -11,7 +10,6 @@ import { SessionMetadataService } from './services/session-metadata.service';
 import { SessionTokenService } from './services/session-token.service';
 import { SessionService } from './services/session.service';
 
-@Global()
 @Module({
   imports: [
     ConfigModule,
@@ -32,7 +30,6 @@ import { SessionService } from './services/session.service';
     SessionCookieService,
     SessionMetadataService,
     SessionAuditService,
-    SessionRiskAuditService,
     SessionCleanupService,
     GqlSessionAuthGuard,
   ],

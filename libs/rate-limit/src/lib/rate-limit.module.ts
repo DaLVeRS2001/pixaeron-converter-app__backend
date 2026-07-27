@@ -1,5 +1,5 @@
 import { DynamicModule, Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import {
   RedisThrottlerStorage,
@@ -7,6 +7,7 @@ import {
 } from '@nestjs-redis/throttler-storage';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { RedisToken, type RedisClientType } from '@pixaeron/redis';
+import { createHmac } from 'node:crypto';
 
 import { GqlThrottlerGuard } from './gql-throttler.guard';
 import { HttpRateLimitMiddleware } from './http-rate-limit.middleware';
@@ -21,11 +22,20 @@ export class RateLimitModule {
       imports: [
         ConfigModule,
         ThrottlerModule.forRootAsync({
-          inject: [RedisToken()],
-          useFactory: (redis: RedisClientType) => ({
+          imports: [ConfigModule],
+          inject: [RedisToken(), ConfigService],
+          useFactory: (
+            redis: RedisClientType,
+            configService: ConfigService,
+          ) => ({
             throttlers: options.throttlers,
             getTracker: (request) =>
-              `${options.namespace}:${request.ip ?? 'unknown'}`,
+              `${options.namespace}:${createHmac(
+                'sha256',
+                configService.getOrThrow(options.ipHashSecretConfigKey),
+              )
+                .update(request['ip'] ?? 'unknown')
+                .digest('hex')}`,
             storage: new RedisThrottlerStorage(
               redis,
               ThrottlerAlgorithm.SlidingWindowCounter,
