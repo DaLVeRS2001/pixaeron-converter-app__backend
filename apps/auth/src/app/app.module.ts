@@ -1,9 +1,10 @@
+import { ApolloServerPluginInlineTraceDisabled } from '@apollo/server/plugin/disabled';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
-  ApolloDriver,
-  ApolloDriverConfig,
+  ApolloFederationDriver,
+  ApolloFederationDriverConfig,
   GraphQLModule,
 } from '@pixaeron/graphql';
 import { HttpContext } from '@pixaeron/nestjs';
@@ -39,10 +40,11 @@ import {
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
-    GraphQLModule.forRoot<ApolloDriverConfig>({
-      driver: ApolloDriver,
-      autoSchemaFile: true,
+    GraphQLModule.forRoot<ApolloFederationDriverConfig>({
+      driver: ApolloFederationDriver,
+      autoSchemaFile: { federation: 2 },
       sortSchema: true,
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
       path: 'auth',
       graphiql: process.env.NODE_ENV !== 'production',
       formatError: formatAuthGraphQLError,

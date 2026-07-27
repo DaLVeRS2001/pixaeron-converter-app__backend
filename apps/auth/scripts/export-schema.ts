@@ -1,11 +1,13 @@
 import 'reflect-metadata';
 
-import { NestFactory } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
 import {
-  GraphQLSchemaBuilderModule,
-  GraphQLSchemaFactory,
+  ApolloFederationDriver,
+  ApolloFederationDriverConfig,
+  GraphQLModule,
+  GraphQLSchemaHost,
 } from '@pixaeron/graphql';
-import { lexicographicSortSchema, printSchema } from 'graphql';
+import { graphql, type ExecutionResult } from 'graphql';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -14,28 +16,50 @@ import { USER_RESOLVERS } from '../src/app/user/user.module';
 
 const schemaPath = resolve(__dirname, '../schema.graphql');
 
+type ServiceSdlData = {
+  _service: { sdl: string };
+};
+
 async function generateSchema(): Promise<string> {
-  const app = await NestFactory.createApplicationContext(
-    GraphQLSchemaBuilderModule,
-    { logger: false },
-  );
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      GraphQLModule.forRoot<ApolloFederationDriverConfig>({
+        driver: ApolloFederationDriver,
+        autoSchemaFile: { federation: 2 },
+        sortSchema: true,
+      }),
+    ],
+    providers: [...AUTH_RESOLVERS, ...USER_RESOLVERS],
+  })
+    .useMocker(() => ({}))
+    .compile();
 
   try {
-    const schemaFactory = app.get(GraphQLSchemaFactory);
-    const schema = await schemaFactory.create([
-      ...AUTH_RESOLVERS,
-      ...USER_RESOLVERS,
-    ]);
+    await moduleRef.init();
+
+    const result = (await graphql({
+      schema: moduleRef.get(GraphQLSchemaHost).schema,
+      source: '{ _service { sdl } }',
+    })) as ExecutionResult<ServiceSdlData>;
+
+    if (result.errors?.length) {
+      throw new Error(result.errors.map((error) => error.message).join('\n'));
+    }
+
+    if (!result.data) {
+      throw new Error('Federation schema query returned no data.');
+    }
 
     return [
       '# GENERATED FILE. DO NOT EDIT MANUALLY.',
       '# Source of truth: NestJS code-first resolvers and models in apps/auth.',
+      '# Contract: Apollo Federation 2 subgraph SDL.',
       '',
-      printSchema(lexicographicSortSchema(schema)),
+      result.data._service.sdl.trim(),
       '',
     ].join('\n');
   } finally {
-    await app.close();
+    await moduleRef.close();
   }
 }
 
@@ -46,9 +70,7 @@ async function main(): Promise<void> {
     const currentSchema = await readFile(schemaPath, 'utf8');
 
     if (currentSchema !== generatedSchema) {
-      throw new Error(
-        'GraphQL schema is stale. Run npm run schema:export:auth.',
-      );
+      throw new Error('GraphQL schema is stale. Run npm run schema:export.');
     }
 
     process.stdout.write(`GraphQL schema is current: ${schemaPath}\n`);

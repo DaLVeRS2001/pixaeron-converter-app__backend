@@ -7,8 +7,8 @@
     "docker:start": "docker compose up -d --build",
     "docker:recreate": "docker compose up -d --build --force-recreate",
     "docker:stop": "docker compose down",
-    "schema:export:auth": "ts-node --transpile-only --project apps/auth/tsconfig.app.json -r tsconfig-paths/register apps/auth/scripts/export-schema.ts",
-    "schema:check:auth": "ts-node --transpile-only --project apps/auth/tsconfig.app.json -r tsconfig-paths/register apps/auth/scripts/export-schema.ts --check",
+    "schema:export": "nx run-many -t schema-export",
+    "schema:check": "nx run-many -t schema-check",
     "check": "nx run-many --targets=lint,test,build"
   },
   "private": true,

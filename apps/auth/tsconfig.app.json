@@ -10,7 +10,7 @@
     "target": "es2021",
     "moduleResolution": "node"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
   "exclude": [
     "jest.config.ts",
     "jest.config.cts",
