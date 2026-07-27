@@ -11,7 +11,7 @@ import { RateLimitModule } from '@pixaeron/rate-limit';
 import { RedisInfrastructureModule } from '@pixaeron/redis';
 
 import { AuthModule } from './auth/auth.module';
-import { validateAuthEnvironment } from './config/auth-environment.validator';
+import { authEnvironmentSchema } from './config/auth-environment.schema';
 import { formatAuthGraphQLError } from './graphql-error-contract';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
@@ -24,7 +24,11 @@ import {
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      validate: validateAuthEnvironment,
+      validationSchema: authEnvironmentSchema,
+      validationOptions: {
+        abortEarly: false,
+        allowUnknown: true,
+      },
     }),
     RedisInfrastructureModule.forRoot('auth'),
     RateLimitModule.forRoot({

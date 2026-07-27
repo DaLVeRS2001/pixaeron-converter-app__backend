@@ -33,7 +33,7 @@ LABEL com.pixaeron.service="auth"
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/*
-.
+
 COPY --from=builder /workspace/dist/apps/auth/package.json ./package.json
 COPY --from=builder /workspace/dist/apps/auth/package-lock.json ./package-lock.json
 COPY --from=builder /workspace/dist/apps/auth/workspace_modules ./workspace_modules
