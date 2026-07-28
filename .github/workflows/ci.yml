@@ -25,10 +25,12 @@ jobs:
       contents: read
       id-token: write
       packages: write
-    uses: DaLVeRS2001/ci/.github/workflows/pixaeron.yml@b865e9fd9db38eae47381d54d67d7d9f73743bf2
+    uses: DaLVeRS2001/ci/.github/workflows/pixaeron.yml@4b9e622032be938bf425a87eddc38d86a451fceb
     with:
       service: ${{ inputs.service || 'all' }}
+      apollo_graph_ref: ${{ vars.APOLLO_GRAPH_REF }}
     secrets:
+      APOLLO_KEY: ${{ secrets.APOLLO_KEY }}
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
