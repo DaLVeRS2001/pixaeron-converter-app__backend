@@ -1,31 +1,35 @@
+import { ApolloServerPluginInlineTraceDisabled } from '@apollo/server/plugin/disabled';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import {
-  ApolloDriver,
-  ApolloDriverConfig,
+  ApolloFederationDriver,
+  ApolloFederationDriverConfig,
   GraphQLModule,
 } from '@pixaeron/graphql';
+import { HttpContext } from '@pixaeron/nestjs';
 import { RateLimitModule } from '@pixaeron/rate-limit';
 import { RedisInfrastructureModule } from '@pixaeron/redis';
+
 import { AuthModule } from './auth/auth.module';
-import { SessionModule } from './session/session.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { UserModule } from './user/user.module';
-import { HttpContext } from '@pixaeron/nestjs';
+import { authEnvironmentSchema } from './config/auth-environment.schema';
+import { formatAuthGraphQLError } from './graphql-error-contract';
 import { HealthController } from './health.controller';
+import { PrismaModule } from './prisma/prisma.module';
 import {
   AUTH_GQL_RATE_LIMITS,
   AUTH_HTTP_RATE_LIMITS,
-} from './rate-limit/rate-limit.constants';
-import { formatAuthGraphQLError } from './graphql-error-contract';
-import { validateAuthEnvironment } from './config/auth-environment.validator';
+} from './auth/constants/rate-limit.constants';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      validate: validateAuthEnvironment,
+      validationSchema: authEnvironmentSchema,
+      validationOptions: {
+        abortEarly: false,
+        allowUnknown: true,
+      },
     }),
     RedisInfrastructureModule.forRoot('auth'),
     RateLimitModule.forRoot({
@@ -36,28 +40,18 @@ import { validateAuthEnvironment } from './config/auth-environment.validator';
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
-    SessionModule,
-    GraphQLModule.forRoot<ApolloDriverConfig>({
-      driver: ApolloDriver,
-      graphiql: process.env.NODE_ENV !== 'production',
-      autoSchemaFile: true,
+    GraphQLModule.forRoot<ApolloFederationDriverConfig>({
+      driver: ApolloFederationDriver,
+      autoSchemaFile: { federation: 2 },
       sortSchema: true,
+      plugins: [ApolloServerPluginInlineTraceDisabled()],
       path: 'auth',
+      graphiql: process.env.NODE_ENV !== 'production',
       formatError: formatAuthGraphQLError,
-      playground:
-        process.env.NODE_ENV !== 'production'
-          ? {
-              settings: {
-                'request.credentials': 'include',
-              },
-            }
-          : false,
       context: (data: HttpContext) => data,
     }),
     AuthModule,
-    UserModule,
   ],
   controllers: [HealthController],
-  providers: [],
 })
 export class AppModule {}

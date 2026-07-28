@@ -1,13 +1,13 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { OAuth2Client } from 'google-auth-library';
 
-import { GoogleAuthService } from './google-auth.service';
+import { GoogleTokenService } from './google-token.service';
 
-describe('GoogleAuthService', () => {
+describe('GoogleTokenService', () => {
   const configService = {
     getOrThrow: jest.fn().mockReturnValue('google-client-id'),
   };
-  const service = new GoogleAuthService(configService as never);
+  const service = new GoogleTokenService(configService as never);
 
   afterEach(() => jest.restoreAllMocks());
 

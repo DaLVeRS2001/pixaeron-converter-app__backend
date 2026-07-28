@@ -5,10 +5,10 @@
   "scripts": {
     "prepare": "husky",
     "docker:start": "docker compose up -d --build",
-    "docker:recreate": "docker compose up -d --force-recreate",
+    "docker:recreate": "docker compose up -d --build --force-recreate",
     "docker:stop": "docker compose down",
-    "schema:export:auth": "ts-node --transpile-only --project tools/graphql/tsconfig.json -r tsconfig-paths/register tools/graphql/export-auth-schema.ts",
-    "schema:check:auth": "ts-node --transpile-only --project tools/graphql/tsconfig.json -r tsconfig-paths/register tools/graphql/export-auth-schema.ts --check",
+    "schema:export": "nx run-many -t schema-export",
+    "schema:check": "nx run-many -t schema-check",
     "check": "nx run-many --targets=lint,test,build"
   },
   "private": true,

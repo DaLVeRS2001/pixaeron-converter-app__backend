@@ -1,6 +1,6 @@
 import { createGraphQLErrorFormatter } from '@pixaeron/graphql';
 
-const AUTH_PUBLIC_GRAPHQL_ERROR_CODES = new Set([
+const publicErrorCodes = new Set([
   'ACCOUNT_LINK_REQUIRED',
   'AUTH_ACTION_COOLDOWN',
   'CAPTCHA_INVALID',
@@ -16,8 +16,5 @@ const AUTH_PUBLIC_GRAPHQL_ERROR_CODES = new Set([
   'TOO_MANY_LOGIN_ATTEMPTS',
 ]);
 
-const formatAuthGraphQLError = createGraphQLErrorFormatter({
-  publicCodes: AUTH_PUBLIC_GRAPHQL_ERROR_CODES,
-});
-
-export { AUTH_PUBLIC_GRAPHQL_ERROR_CODES, formatAuthGraphQLError };
+export const formatAuthGraphQLError =
+  createGraphQLErrorFormatter(publicErrorCodes);

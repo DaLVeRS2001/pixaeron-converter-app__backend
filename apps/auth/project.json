@@ -119,18 +119,26 @@
         "cwd": "{projectRoot}"
       }
     },
+    "schema-export": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "ts-node --transpile-only --project apps/auth/tsconfig.app.json -r tsconfig-paths/register apps/auth/scripts/export-schema.ts",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": ["prisma-generate"]
+    },
     "schema-check": {
       "executor": "nx:run-commands",
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**/*.ts",
         "{workspaceRoot}/libs/graphql/src/**/*.ts",
-        "{workspaceRoot}/tools/graphql/export-auth-schema.ts",
+        "{projectRoot}/scripts/export-schema.ts",
         "{projectRoot}/schema.graphql",
         "{workspaceRoot}/package-lock.json"
       ],
       "options": {
-        "command": "npm run schema:check:auth",
+        "command": "ts-node --transpile-only --project apps/auth/tsconfig.app.json -r tsconfig-paths/register apps/auth/scripts/export-schema.ts --check",
         "cwd": "{workspaceRoot}"
       },
       "dependsOn": ["prisma-generate"]

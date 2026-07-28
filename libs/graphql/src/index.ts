@@ -1,5 +1,8 @@
-export { ApolloDriver } from '@nestjs/apollo';
-export type { ApolloDriverConfig } from '@nestjs/apollo';
+export { ApolloDriver, ApolloFederationDriver } from '@nestjs/apollo';
+export type {
+  ApolloDriverConfig,
+  ApolloFederationDriverConfig,
+} from '@nestjs/apollo';
 export {
   Args,
   Context,
@@ -8,6 +11,7 @@ export {
   GraphQLModule,
   GraphQLSchemaBuilderModule,
   GraphQLSchemaFactory,
+  GraphQLSchemaHost,
   ID,
   InputType,
   Int,
@@ -17,9 +21,5 @@ export {
   registerEnumType,
   Resolver,
 } from '@nestjs/graphql';
-export {
-  createGraphQLErrorFormatter,
-  formatGraphQLError,
-} from './lib/format-graphql-error';
-export type { GraphQLErrorFormatterOptions } from './lib/format-graphql-error';
+export { createGraphQLErrorFormatter } from './lib/format-graphql-error';
 export * from './lib/models';

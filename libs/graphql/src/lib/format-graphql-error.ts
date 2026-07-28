@@ -1,39 +1,71 @@
-import { unwrapResolverError } from '@apollo/server/errors';
+import {
+  ApolloServerErrorCode,
+  unwrapResolverError,
+} from '@apollo/server/errors';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { GraphQLFormattedError } from 'graphql';
 
-const HTTP_STATUS_CODES: Partial<Record<HttpStatus, string>> = {
-  [HttpStatus.BAD_REQUEST]: 'BAD_REQUEST',
-  [HttpStatus.UNAUTHORIZED]: 'UNAUTHENTICATED',
-  [HttpStatus.FORBIDDEN]: 'FORBIDDEN',
-  [HttpStatus.NOT_FOUND]: 'NOT_FOUND',
-  [HttpStatus.CONFLICT]: 'CONFLICT',
-  [HttpStatus.TOO_MANY_REQUESTS]: 'TOO_MANY_REQUESTS',
+type SafeError = Readonly<{
+  code: string;
+  message: string;
+}>;
+
+type HttpErrorBody = {
+  code?: unknown;
+  message?: unknown;
+  action?: unknown;
+  retryAfter?: unknown;
 };
 
-const SAFE_HTTP_MESSAGES: Partial<Record<HttpStatus, string>> = {
-  [HttpStatus.BAD_REQUEST]: 'Bad request',
-  [HttpStatus.UNAUTHORIZED]: 'Unauthenticated',
-  [HttpStatus.FORBIDDEN]: 'Forbidden',
-  [HttpStatus.NOT_FOUND]: 'Not found',
-  [HttpStatus.CONFLICT]: 'Conflict',
-  [HttpStatus.TOO_MANY_REQUESTS]: 'Too many requests',
+const INTERNAL_ERROR: SafeError = {
+  code: ApolloServerErrorCode.INTERNAL_SERVER_ERROR,
+  message: 'Internal server error',
 };
 
-const SAFE_GRAPHQL_REQUEST_ERROR_CODES = new Set([
-  'GRAPHQL_PARSE_FAILED',
-  'GRAPHQL_VALIDATION_FAILED',
+const HTTP_ERROR: SafeError = {
+  code: 'HTTP_ERROR',
+  message: 'Request failed',
+};
+
+const HTTP_ERRORS: Readonly<Partial<Record<number, SafeError>>> = {
+  [HttpStatus.BAD_REQUEST]: {
+    code: ApolloServerErrorCode.BAD_REQUEST,
+    message: 'Bad request',
+  },
+  [HttpStatus.UNAUTHORIZED]: {
+    code: 'UNAUTHENTICATED',
+    message: 'Unauthenticated',
+  },
+  [HttpStatus.FORBIDDEN]: { code: 'FORBIDDEN', message: 'Forbidden' },
+  [HttpStatus.NOT_FOUND]: { code: 'NOT_FOUND', message: 'Not found' },
+  [HttpStatus.CONFLICT]: { code: 'CONFLICT', message: 'Conflict' },
+  [HttpStatus.TOO_MANY_REQUESTS]: {
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many requests',
+  },
+};
+
+const SAFE_REQUEST_CODES = new Set<string>([
+  ApolloServerErrorCode.GRAPHQL_PARSE_FAILED,
+  ApolloServerErrorCode.GRAPHQL_VALIDATION_FAILED,
 ]);
 
-type GraphQLErrorFormatterOptions = {
-  publicCodes: ReadonlySet<string>;
-};
+function createFormattedError(
+  formattedError: GraphQLFormattedError,
+  error: SafeError,
+  extensions: Record<string, unknown> = {},
+): GraphQLFormattedError {
+  return {
+    message: error.message,
+    ...(formattedError.locations !== undefined
+      ? { locations: formattedError.locations }
+      : {}),
+    ...(formattedError.path !== undefined ? { path: formattedError.path } : {}),
+    extensions: { code: error.code, ...extensions },
+  };
+}
 
-const DEFAULT_PUBLIC_CODES = new Set<string>();
-
-export function createGraphQLErrorFormatter({
-  publicCodes,
-}: GraphQLErrorFormatterOptions) {
+export function createGraphQLErrorFormatter(publicCodes: ReadonlySet<string>) {
   return (
     formattedError: GraphQLFormattedError,
     error: unknown,
@@ -41,79 +73,65 @@ export function createGraphQLErrorFormatter({
     const exception = unwrapResolverError(error);
 
     if (!(exception instanceof HttpException)) {
-      const code = formattedError.extensions?.code;
+      const code = formattedError.extensions?.['code'];
 
-      if (
-        formattedError.path === undefined &&
-        typeof code === 'string' &&
-        SAFE_GRAPHQL_REQUEST_ERROR_CODES.has(code)
-      ) {
-        return {
-          message: formattedError.message,
-          ...(formattedError.locations
-            ? { locations: formattedError.locations }
-            : {}),
-          extensions: { code },
-        };
+      if (formattedError.path === undefined && typeof code === 'string') {
+        if (SAFE_REQUEST_CODES.has(code)) {
+          return createFormattedError(formattedError, {
+            code,
+            message: formattedError.message,
+          });
+        }
+
+        if (code === ApolloServerErrorCode.BAD_USER_INPUT) {
+          return createFormattedError(formattedError, {
+            code,
+            message: 'Bad request',
+          });
+        }
       }
 
-      return {
-        message: 'Internal server error',
-        ...(formattedError.locations
-          ? { locations: formattedError.locations }
-          : {}),
-        ...(formattedError.path ? { path: formattedError.path } : {}),
-        extensions: { code: 'INTERNAL_SERVER_ERROR' },
-      };
+      return createFormattedError(formattedError, INTERNAL_ERROR);
     }
 
     const response = exception.getResponse();
-    const body =
-      typeof response === 'object' && response !== null
-        ? (response as Record<string, unknown>)
+    const body: HttpErrorBody =
+      typeof response === 'object' && response !== null ? response : {};
+    const publicCode =
+      typeof body.code === 'string' && publicCodes.has(body.code)
+        ? body.code
         : undefined;
     const status = exception.getStatus();
-    const candidateCode =
-      typeof body?.code === 'string' ? body.code : undefined;
-    const publicCode =
-      candidateCode && publicCodes.has(candidateCode)
-        ? candidateCode
-        : undefined;
-    const fallbackCode =
-      HTTP_STATUS_CODES[status] ??
+    const fallback =
+      HTTP_ERRORS[status] ??
       (status >= HttpStatus.INTERNAL_SERVER_ERROR
-        ? 'INTERNAL_SERVER_ERROR'
-        : 'HTTP_ERROR');
+        ? INTERNAL_ERROR
+        : HTTP_ERROR);
+    const extensions: Record<string, unknown> = {};
 
-    return {
-      message:
-        publicCode && typeof body?.message === 'string'
-          ? body.message
-          : status >= HttpStatus.INTERNAL_SERVER_ERROR
-            ? 'Internal server error'
-            : (SAFE_HTTP_MESSAGES[status] ?? 'Request failed'),
-      ...(formattedError.locations
-        ? { locations: formattedError.locations }
-        : {}),
-      ...(formattedError.path ? { path: formattedError.path } : {}),
-      extensions: {
-        code: publicCode ?? fallbackCode,
-        ...(publicCode && typeof body?.action === 'string'
-          ? { action: body.action }
-          : {}),
-        ...(publicCode &&
-        typeof body?.retryAfter === 'number' &&
-        Number.isFinite(body.retryAfter) &&
-        body.retryAfter >= 0
-          ? { retryAfter: body.retryAfter }
-          : {}),
+    if (publicCode && typeof body.action === 'string') {
+      extensions['action'] = body.action;
+    }
+
+    if (
+      publicCode &&
+      typeof body.retryAfter === 'number' &&
+      Number.isFinite(body.retryAfter) &&
+      body.retryAfter >= 0
+    ) {
+      extensions['retryAfter'] = body.retryAfter;
+    }
+
+    return createFormattedError(
+      formattedError,
+      {
+        code: publicCode ?? fallback.code,
+        message:
+          publicCode && typeof body.message === 'string'
+            ? body.message
+            : fallback.message,
       },
-    };
+      extensions,
+    );
   };
 }
-
-export const formatGraphQLError = createGraphQLErrorFormatter({
-  publicCodes: DEFAULT_PUBLIC_CODES,
-});
-
-export type { GraphQLErrorFormatterOptions };

@@ -5,7 +5,7 @@ import type { CookieOptions, Response } from 'express';
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
-} from '../session.constants';
+} from '../constants/session.constants';
 
 @Injectable()
 export class SessionCookieService {

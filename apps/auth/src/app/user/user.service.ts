@@ -1,41 +1,64 @@
 import { Injectable } from '@nestjs/common';
-import { hash } from 'bcryptjs';
+import { ConfigService } from '@nestjs/config';
+import { compare, hash } from 'bcryptjs';
 
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { authenticatedUserSelect } from './prisma/user.select';
 
-const PASSWORD_HASH_ROUNDS = 12;
+const INVALID_PASSWORD = 'pixaeron-dummy-password-not-valid';
+
+interface CreateLocalUserData {
+  email: string;
+  username: string;
+  passwordHash: string;
+  legalConsentVersion: string;
+  legalConsentAcceptedAt: Date;
+}
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly passwordHashRounds: number;
+  private readonly invalidPasswordHash: Promise<string>;
 
-  async createUser(data: Prisma.UserCreateInput) {
-    return this.prisma.user.create({
+  constructor(
+    private readonly prisma: PrismaService,
+    configService: ConfigService,
+  ) {
+    this.passwordHashRounds = Number(
+      configService.getOrThrow('PASSWORD_HASH_ROUNDS'),
+    );
+    this.invalidPasswordHash = hash(INVALID_PASSWORD, this.passwordHashRounds);
+  }
+
+  createLocalUserInTransaction(
+    transaction: Prisma.TransactionClient,
+    data: CreateLocalUserData,
+  ) {
+    return transaction.user.create({
       data: {
-        ...data,
-        password: data.password
-          ? await this.hashPassword(data.password as string)
-          : null,
+        email: data.email,
+        username: data.username,
+        password: data.passwordHash,
+        legalConsentVersion: data.legalConsentVersion,
+        legalConsentAcceptedAt: data.legalConsentAcceptedAt,
       },
     });
   }
 
   hashPassword(password: string): Promise<string> {
-    return hash(password, PASSWORD_HASH_ROUNDS);
+    return hash(password, this.passwordHashRounds);
   }
 
-  async getUser(args: Prisma.UserWhereUniqueInput) {
-    return this.prisma.user.findUnique({
-      where: args,
-    });
+  async verifyPassword(
+    password: string,
+    passwordHash: string | null | undefined,
+  ): Promise<boolean> {
+    // Keep unknown and passwordless accounts on the same bcrypt path as local accounts.
+    const expectedHash = passwordHash ?? (await this.invalidPasswordHash);
+    return compare(password, expectedHash);
   }
 
-  async getAuthenticatedUser(args: Prisma.UserWhereUniqueInput) {
-    return this.prisma.user.findUnique({
-      where: args,
-      select: authenticatedUserSelect,
-    });
+  getUser(where: Prisma.UserWhereUniqueInput) {
+    return this.prisma.user.findUnique({ where });
   }
 }
