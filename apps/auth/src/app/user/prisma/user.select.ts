@@ -2,6 +2,7 @@ import { Prisma } from '../../../generated/prisma/client';
 
 export const authenticatedUserSelect = {
   id: true,
+  publicId: true,
   email: true,
   username: true,
   emailVerified: true,

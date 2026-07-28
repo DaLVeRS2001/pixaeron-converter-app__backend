@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { PlanCode } from '../../generated/prisma/client';
+import type { AuthenticatedUser } from '../user/prisma/user.select';
 
 import { AuthResolver } from './auth.resolver';
 
@@ -27,6 +28,7 @@ describe('AuthResolver delegation', () => {
   const request = {
     user: {
       id: 7,
+      publicId: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
       email: 'user@example.com',
       username: 'user',
       emailVerified: true,
@@ -34,17 +36,7 @@ describe('AuthResolver delegation', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     },
-  } as unknown as Request & {
-    user: {
-      id: number;
-      email: string;
-      username: string;
-      emailVerified: boolean;
-      planCode: PlanCode;
-      createdAt: Date;
-      updatedAt: Date;
-    };
-  };
+  } as unknown as Request & { user: AuthenticatedUser };
   const response = {} as Response;
   const context = { req: request, res: response };
 
