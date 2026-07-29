@@ -103,6 +103,7 @@ type Mutation {
   requestPasswordReset(input: EmailActionInput!): AuthRequestResult!
   resetPassword(input: ResetPasswordInput!): PasswordResetResult!
   googleLogin(googleLoginInput: GoogleLoginInput!): User!
+  refreshSession: Boolean!
   logout: Boolean!
   logoutAll: Boolean!
 }

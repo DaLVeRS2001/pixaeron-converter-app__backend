@@ -4,7 +4,10 @@ import type { Request, Response } from 'express';
 
 import { SessionRevokedReason } from '../../../generated/prisma/client';
 import { authenticatedUserSelect } from '../../user/prisma/user.select';
-import { REFRESH_TOKEN_COOKIE } from '../constants/session.constants';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+} from '../constants/session.constants';
 import { SessionService } from './session.service';
 
 jest.mock('bcryptjs', () => ({ compare: jest.fn() }));
@@ -116,16 +119,16 @@ describe('SessionService', () => {
       true,
     );
   });
-  it('uses a valid access token without rotating the refresh token', async () => {
+  it('authenticates a valid access token without rotating the refresh token', async () => {
     const accessRequest = {
-      cookies: { Authentication: 'access-token' },
+      cookies: { [ACCESS_TOKEN_COOKIE]: 'access-token' },
     } as unknown as Request;
     tokens.verifyAccessToken.mockResolvedValue({ subject: user.publicId });
     prisma.user.findUnique.mockResolvedValue(user);
 
-    await expect(
-      service.authenticateRequest(accessRequest, response),
-    ).resolves.toBe(user);
+    await expect(service.authenticateAccessToken(accessRequest)).resolves.toBe(
+      user,
+    );
 
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { publicId: user.publicId },
@@ -133,6 +136,34 @@ describe('SessionService', () => {
     });
     expect(prisma.session.findUnique).not.toHaveBeenCalled();
     expect(cookies.setAuthCookies).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to the refresh cookie for access authentication', async () => {
+    tokens.verifyAccessToken.mockResolvedValue(null);
+
+    await expect(service.authenticateAccessToken(request)).rejects.toThrow(
+      UnauthorizedException,
+    );
+
+    expect(tokens.parseRefreshToken).not.toHaveBeenCalled();
+    expect(prisma.session.findUnique).not.toHaveBeenCalled();
+    expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
+  });
+
+  it('keeps implicit refresh during the staged frontend rollout', async () => {
+    tokens.verifyAccessToken.mockResolvedValue(null);
+    prisma.session.findUnique.mockResolvedValue(activeSession);
+    (compare as jest.Mock).mockResolvedValue(true);
+    prisma.session.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(service.authenticateRequest(request, response)).resolves.toBe(
+      user,
+    );
+
+    expect(tokens.parseRefreshToken).toHaveBeenCalledWith(
+      'session-id.current-secret',
+    );
+    expect(cookies.setAuthCookies).toHaveBeenCalledTimes(1);
   });
 
   it('rotates an active refresh token with a compare-and-swap update', async () => {

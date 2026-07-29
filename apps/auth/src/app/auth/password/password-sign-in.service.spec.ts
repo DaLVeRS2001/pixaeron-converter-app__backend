@@ -116,7 +116,12 @@ describe('PasswordSignInService', () => {
         request,
         response,
       ),
-    ).rejects.toMatchObject({ message: 'Invalid email or password' });
+    ).rejects.toMatchObject({
+      response: {
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid email or password',
+      },
+    });
 
     expect(loginAttemptService.clear).not.toHaveBeenCalled();
     expect(loginAttemptService.recordFailure).toHaveBeenCalledWith(

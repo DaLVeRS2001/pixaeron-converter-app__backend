@@ -111,12 +111,15 @@ export class SessionService {
     request: Request,
     response: Response,
   ): Promise<AuthenticatedUser> {
-    const accessToken = request.cookies?.[ACCESS_TOKEN_COOKIE];
-    const user = accessToken
-      ? await this.validateAccessToken(accessToken)
-      : null;
-
+    const user = await this.validateAccessToken(request);
     return user ?? this.refreshSession(request, response);
+  }
+
+  async authenticateAccessToken(request: Request): Promise<AuthenticatedUser> {
+    const user = await this.validateAccessToken(request);
+    if (!user) throw new UnauthorizedException();
+
+    return user;
   }
 
   async refreshSession(
@@ -301,24 +304,24 @@ export class SessionService {
     }
   }
 
+  private async validateAccessToken(
+    request: Request,
+  ): Promise<AuthenticatedUser | null> {
+    const accessToken = request.cookies?.[ACCESS_TOKEN_COOKIE];
+    const payload = accessToken
+      ? await this.sessionTokenService.verifyAccessToken(accessToken)
+      : null;
+
+    return payload
+      ? this.prisma.user.findUnique({
+          where: { publicId: payload.subject },
+          select: authenticatedUserSelect,
+        })
+      : null;
+  }
+
   private rejectSession(response: Response): never {
     this.sessionCookieService.clearAuthCookies(response);
     throw new UnauthorizedException();
-  }
-
-  private getAuthenticatedUser(publicId: string) {
-    return this.prisma.user.findUnique({
-      where: { publicId },
-      select: authenticatedUserSelect,
-    });
-  }
-
-  private async validateAccessToken(
-    accessToken: string,
-  ): Promise<AuthenticatedUser | null> {
-    const payload =
-      await this.sessionTokenService.verifyAccessToken(accessToken);
-
-    return payload ? this.getAuthenticatedUser(payload.subject) : null;
   }
 }

@@ -17,7 +17,11 @@ describe('AuthResolver delegation', () => {
     resetPassword: jest.fn(),
   };
   const googleSignInService = { login: jest.fn() };
-  const sessionService = { logout: jest.fn(), logoutAll: jest.fn() };
+  const sessionService = {
+    refreshSession: jest.fn(),
+    logout: jest.fn(),
+    logoutAll: jest.fn(),
+  };
   const resolver = new AuthResolver(
     passwordSignInService as never,
     registrationService as never,
@@ -133,13 +137,19 @@ describe('AuthResolver delegation', () => {
     );
   });
 
-  it('delegates both session exit paths to SessionService', async () => {
+  it('delegates explicit refresh and both session exit paths', async () => {
+    sessionService.refreshSession.mockResolvedValue(request.user);
     sessionService.logout.mockResolvedValue(true);
     sessionService.logoutAll.mockResolvedValue(true);
 
+    await expect(resolver.refreshSession(context)).resolves.toBe(true);
     await expect(resolver.logout(context)).resolves.toBe(true);
     await expect(resolver.logoutAll(request, response)).resolves.toBe(true);
 
+    expect(sessionService.refreshSession).toHaveBeenCalledWith(
+      request,
+      response,
+    );
     expect(sessionService.logout).toHaveBeenCalledWith(request, response);
     expect(sessionService.logoutAll).toHaveBeenCalledWith(7, request, response);
   });
