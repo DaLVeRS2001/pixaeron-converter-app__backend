@@ -77,6 +77,25 @@ function signWithActive(options: {
 }
 
 describe('SessionTokenService refresh tokens', () => {
+  it('issues and verifies refresh credentials', async () => {
+    const issued = await service.issueRefreshCredential();
+
+    const [tokenId, secret] = issued.credential.split('.');
+
+    expect(tokenId).toBe(issued.tokenId);
+    expect(secret).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(issued.hash).not.toBe(issued.credential);
+    await expect(
+      service.verifyRefreshCredential(issued.credential, issued.hash),
+    ).resolves.toBe(true);
+    await expect(
+      service.verifyRefreshCredential(
+        'tampered-refresh-credential',
+        issued.hash,
+      ),
+    ).resolves.toBe(false);
+  });
+
   it('parses legacy and tracked refresh credentials', () => {
     expect(service.parseRefreshToken('session.secret')).toEqual({
       sessionId: 'session',

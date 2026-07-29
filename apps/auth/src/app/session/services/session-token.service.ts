@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { hash } from 'bcryptjs';
-import { randomBytes } from 'node:crypto';
+import { compare, hash } from 'bcryptjs';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import {
   ACCESS_TOKEN_ALGORITHM,
@@ -30,7 +30,13 @@ type DecodedAccessToken = {
   };
 };
 
-type ParsedRefreshToken = {
+export type IssuedRefreshCredential = {
+  credential: string;
+  hash: string;
+  tokenId: string;
+};
+
+export type ParsedRefreshToken = {
   sessionId: string;
   tokenId?: string;
   refreshCredential: string;
@@ -121,6 +127,24 @@ export class SessionTokenService {
     }
   }
 
+  async issueRefreshCredential(): Promise<IssuedRefreshCredential> {
+    const tokenId = randomUUID();
+    const credential = `${tokenId}.${this.generateRefreshSecret()}`;
+
+    return {
+      credential,
+      hash: await this.hashRefreshCredential(credential),
+      tokenId,
+    };
+  }
+
+  verifyRefreshCredential(
+    credential: string,
+    credentialHash: string,
+  ): Promise<boolean> {
+    return compare(credential, credentialHash);
+  }
+
   parseRefreshToken(refreshToken?: string): ParsedRefreshToken | null {
     const parts = refreshToken?.split('.');
     if (!parts || !parts.every(Boolean)) return null;
@@ -140,17 +164,6 @@ export class SessionTokenService {
     return null;
   }
 
-  generateRefreshSecret(): string {
-    return randomBytes(64).toString('base64url');
-  }
-
-  hashRefreshCredential(refreshCredential: string): Promise<string> {
-    return hash(
-      refreshCredential,
-      Number(this.configService.getOrThrow('REFRESH_TOKEN_HASH_ROUNDS')),
-    );
-  }
-
   getRefreshExpiresAt(now: Date, rememberMe: boolean): Date {
     const envKey = rememberMe
       ? 'REFRESH_EXPIRATION_MS'
@@ -158,6 +171,17 @@ export class SessionTokenService {
 
     return new Date(
       now.getTime() + Number(this.configService.getOrThrow(envKey)),
+    );
+  }
+
+  private generateRefreshSecret(): string {
+    return randomBytes(64).toString('base64url');
+  }
+
+  private hashRefreshCredential(refreshCredential: string): Promise<string> {
+    return hash(
+      refreshCredential,
+      Number(this.configService.getOrThrow('REFRESH_TOKEN_HASH_ROUNDS')),
     );
   }
 }
