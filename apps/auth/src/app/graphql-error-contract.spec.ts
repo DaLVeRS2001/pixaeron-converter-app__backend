@@ -2,6 +2,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { formatAuthGraphQLError } from './graphql-error-contract';
 import { GraphQLError } from 'graphql';
@@ -42,6 +43,26 @@ describe('GraphQL error contract', () => {
     expect(result.extensions).not.toHaveProperty('originalError');
     expect(result.extensions).not.toHaveProperty('stacktrace');
     expect(result.extensions).not.toHaveProperty('privateDetails');
+  });
+
+  it('preserves INVALID_CREDENTIALS instead of treating it as an expired session', () => {
+    const exception = new UnauthorizedException({
+      code: 'INVALID_CREDENTIALS',
+      message: 'Invalid email or password',
+    });
+
+    const result = formatAuthGraphQLError(
+      formattedError,
+      new GraphQLError(exception.message, {
+        originalError: exception,
+        path: ['login'],
+      }),
+    );
+
+    expect(result).toMatchObject({
+      message: 'Invalid email or password',
+      extensions: { code: 'INVALID_CREDENTIALS' },
+    });
   });
 
   it('preserves an explicit public code for a service failure', () => {
