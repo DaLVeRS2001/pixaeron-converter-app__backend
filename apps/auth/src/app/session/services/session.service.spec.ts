@@ -3,6 +3,7 @@ import { compare } from 'bcryptjs';
 import type { Request, Response } from 'express';
 
 import { SessionRevokedReason } from '../../../generated/prisma/client';
+import { authenticatedUserSelect } from '../../user/prisma/user.select';
 import { REFRESH_TOKEN_COOKIE } from '../constants/session.constants';
 import { SessionService } from './session.service';
 
@@ -10,6 +11,7 @@ jest.mock('bcryptjs', () => ({ compare: jest.fn() }));
 
 const user = {
   id: 1,
+  publicId: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
   email: 'user@example.com',
   username: 'User',
   emailVerified: true,
@@ -32,7 +34,9 @@ const activeSession = {
 
 describe('SessionService', () => {
   const prisma = {
+    $transaction: jest.fn(),
     session: {
+      create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
@@ -45,6 +49,7 @@ describe('SessionService', () => {
     generateRefreshSecret: jest.fn(),
     hashRefreshSecret: jest.fn(),
     signAccessToken: jest.fn(),
+    getRefreshExpiresAt: jest.fn(),
   };
   const cookies = {
     setAuthCookies: jest.fn(),
@@ -54,6 +59,7 @@ describe('SessionService', () => {
     getFromRequest: jest.fn(),
   };
   const audit = {
+    recordSessionStarted: jest.fn(),
     recordRefreshFailed: jest.fn(),
     recordSessionExpired: jest.fn(),
     recordRefreshMetadataChanges: jest.fn(),
@@ -73,6 +79,9 @@ describe('SessionService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.$transaction.mockImplementation(
+      (callback: (transaction: typeof prisma) => unknown) => callback(prisma),
+    );
     tokens.parseRefreshToken.mockReturnValue({
       sessionId: activeSession.id,
       refreshSecret: 'current-secret',
@@ -80,6 +89,7 @@ describe('SessionService', () => {
     tokens.generateRefreshSecret.mockReturnValue('next-secret');
     tokens.hashRefreshSecret.mockResolvedValue('next-hash');
     tokens.signAccessToken.mockReturnValue('next-access-token');
+    tokens.getRefreshExpiresAt.mockReturnValue(activeSession.expiresAt);
     metadata.getFromRequest.mockReturnValue({
       userAgent: 'new-agent',
       ipHash: 'new-ip',
@@ -87,19 +97,40 @@ describe('SessionService', () => {
     audit.recordRefreshMetadataChanges.mockResolvedValue(undefined);
     audit.recordRefreshSuccess.mockResolvedValue(undefined);
     audit.recordRefreshFailed.mockResolvedValue(undefined);
+    audit.recordSessionStarted.mockResolvedValue(undefined);
   });
 
+  it('signs a new session access token with the public user subject', async () => {
+    prisma.user.findUnique.mockResolvedValue(user);
+    prisma.session.create.mockResolvedValue(activeSession);
+
+    await expect(
+      service.createSession(user.id, request, response, 'LOGIN_SUCCESS', true),
+    ).resolves.toBe(user);
+
+    expect(tokens.signAccessToken).toHaveBeenCalledWith(user.publicId);
+    expect(cookies.setAuthCookies).toHaveBeenCalledWith(
+      response,
+      'next-access-token',
+      'session-id.next-secret',
+      true,
+    );
+  });
   it('uses a valid access token without rotating the refresh token', async () => {
     const accessRequest = {
       cookies: { Authentication: 'access-token' },
     } as unknown as Request;
-    tokens.verifyAccessToken.mockResolvedValue({ userId: user.id });
+    tokens.verifyAccessToken.mockResolvedValue({ subject: user.publicId });
     prisma.user.findUnique.mockResolvedValue(user);
 
     await expect(
       service.authenticateRequest(accessRequest, response),
     ).resolves.toBe(user);
 
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { publicId: user.publicId },
+      select: authenticatedUserSelect,
+    });
     expect(prisma.session.findUnique).not.toHaveBeenCalled();
     expect(cookies.setAuthCookies).not.toHaveBeenCalled();
   });
@@ -126,6 +157,7 @@ describe('SessionService', () => {
         ipHash: 'new-ip',
       },
     });
+    expect(tokens.signAccessToken).toHaveBeenCalledWith(user.publicId);
     expect(cookies.setAuthCookies).toHaveBeenCalledWith(
       response,
       'next-access-token',

@@ -99,7 +99,7 @@ export class SessionService {
 
     this.sessionCookieService.setAuthCookies(
       response,
-      this.sessionTokenService.signAccessToken(userId),
+      this.sessionTokenService.signAccessToken(user.publicId),
       `${session.id}.${refreshSecret}`,
       rememberMe,
     );
@@ -209,7 +209,7 @@ export class SessionService {
 
     this.sessionCookieService.setAuthCookies(
       response,
-      this.sessionTokenService.signAccessToken(session.userId),
+      this.sessionTokenService.signAccessToken(user.publicId),
       `${session.id}.${nextSecret}`,
       session.rememberMe,
     );
@@ -306,9 +306,9 @@ export class SessionService {
     throw new UnauthorizedException();
   }
 
-  private getAuthenticatedUser(userId: number) {
+  private getAuthenticatedUser(publicId: string) {
     return this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { publicId },
       select: authenticatedUserSelect,
     });
   }
@@ -319,6 +319,6 @@ export class SessionService {
     const payload =
       await this.sessionTokenService.verifyAccessToken(accessToken);
 
-    return payload ? this.getAuthenticatedUser(payload.userId) : null;
+    return payload ? this.getAuthenticatedUser(payload.subject) : null;
   }
 }

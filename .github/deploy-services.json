@@ -8,7 +8,7 @@
     "ssmPath": "/pixaeron/production/auth",
     "secureParameters": [
       "DATABASE_URL",
-      "JWT_SECRET",
+      "JWT_PRIVATE_KEY_BASE64",
       "IP_HASH_SECRET",
       "CAPTCHA_SECRET_KEY"
     ],
