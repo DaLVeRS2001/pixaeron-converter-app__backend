@@ -113,6 +113,9 @@ export class PasswordSignInService {
       attempt.captchaRequired,
     );
 
-    throw new UnauthorizedException('Invalid email or password');
+    throw new UnauthorizedException({
+      code: 'INVALID_CREDENTIALS',
+      message: 'Invalid email or password',
+    });
   }
 }

@@ -16,6 +16,27 @@ describe('GET /auth/health', () => {
   });
 });
 
+type JwksResponse = {
+  keys: Array<Record<string, unknown>>;
+};
+
+describe('GET /auth/.well-known/jwks.json', () => {
+  it('publishes only public access-token verification keys', async () => {
+    const res = await axios.get<JwksResponse>('/auth/.well-known/jwks.json');
+    const [key] = res.data.keys;
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=300');
+    expect(key).toEqual({
+      alg: 'RS256',
+      e: expect.any(String),
+      kid: expect.any(String),
+      kty: 'RSA',
+      n: expect.any(String),
+      use: 'sig',
+    });
+  });
+});
 describe('POST /auth', () => {
   it('serves the committed Federation 2 subgraph schema', async () => {
     const res = await axios.post<FederationSchemaResponse>('/auth', {

@@ -1,8 +1,11 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { compare } from 'bcryptjs';
 import type { Request, Response } from 'express';
 
-import { SessionRevokedReason } from '../../../generated/prisma/client';
+import {
+  SessionRevokedReason,
+  type Session,
+  type SessionRefreshToken,
+} from '../../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AuthenticatedUser,
@@ -11,15 +14,34 @@ import {
 import { SessionAuditService } from '../audit/session-audit.service';
 import {
   ACCESS_TOKEN_COOKIE,
+  REFRESH_REUSE_GRACE_MS,
   REFRESH_TOKEN_COOKIE,
 } from '../constants/session.constants';
 import { SessionCookieService } from './session-cookie.service';
-import { SessionMetadataService } from './session-metadata.service';
-import { SessionTokenService } from './session-token.service';
+import {
+  SessionMetadataService,
+  type SessionRequestMetadata,
+} from './session-metadata.service';
+import {
+  type IssuedRefreshCredential,
+  type ParsedRefreshToken,
+  SessionTokenService,
+} from './session-token.service';
 
 type SessionStartedEventType = 'LOGIN_SUCCESS' | 'REGISTER_SUCCESS';
 
 export class SessionCredentialChangedError extends Error {}
+
+class SessionRotationConflictError extends Error {}
+
+type RefreshSession = Session & { user: AuthenticatedUser };
+
+type RefreshContext = {
+  credentialHash: string;
+  parsedToken: ParsedRefreshToken;
+  refreshToken: SessionRefreshToken | null;
+  session: RefreshSession;
+};
 
 @Injectable()
 export class SessionService {
@@ -42,9 +64,8 @@ export class SessionService {
     expectedPasswordHash?: string,
   ): Promise<AuthenticatedUser> {
     const now = new Date();
-    const refreshSecret = this.sessionTokenService.generateRefreshSecret();
-    const refreshTokenHash =
-      await this.sessionTokenService.hashRefreshSecret(refreshSecret);
+    const refreshCredential =
+      await this.sessionTokenService.issueRefreshCredential();
     const requestMetadata = this.sessionMetadataService.getFromRequest(request);
 
     const { session, user } = await this.prisma.$transaction(
@@ -73,7 +94,13 @@ export class SessionService {
         const session = await transaction.session.create({
           data: {
             userId,
-            refreshTokenHash,
+            refreshTokenHash: refreshCredential.hash,
+            refreshTokens: {
+              create: {
+                id: refreshCredential.tokenId,
+                credentialHash: refreshCredential.hash,
+              },
+            },
             expiresAt: this.sessionTokenService.getRefreshExpiresAt(
               now,
               rememberMe,
@@ -99,8 +126,8 @@ export class SessionService {
 
     this.sessionCookieService.setAuthCookies(
       response,
-      this.sessionTokenService.signAccessToken(userId),
-      `${session.id}.${refreshSecret}`,
+      this.sessionTokenService.signAccessToken(user.publicId),
+      `${session.id}.${refreshCredential.credential}`,
       rememberMe,
     );
 
@@ -111,96 +138,46 @@ export class SessionService {
     request: Request,
     response: Response,
   ): Promise<AuthenticatedUser> {
-    const accessToken = request.cookies?.[ACCESS_TOKEN_COOKIE];
-    const user = accessToken
-      ? await this.validateAccessToken(accessToken)
-      : null;
-
+    const user = await this.validateAccessToken(request);
     return user ?? this.refreshSession(request, response);
+  }
+
+  async authenticateAccessToken(request: Request): Promise<AuthenticatedUser> {
+    const user = await this.validateAccessToken(request);
+    if (!user) throw new UnauthorizedException();
+
+    return user;
   }
 
   async refreshSession(
     request: Request,
     response: Response,
   ): Promise<AuthenticatedUser> {
-    const parsedToken = this.sessionTokenService.parseRefreshToken(
-      request.cookies?.[REFRESH_TOKEN_COOKIE],
-    );
-    if (!parsedToken) return this.rejectSession(response);
-
-    const session = await this.prisma.session.findUnique({
-      where: { id: parsedToken.sessionId },
-      include: { user: { select: authenticatedUserSelect } },
-    });
-    if (!session) return this.rejectSession(response);
-
-    const user = session.user;
-
     const now = new Date();
-    if (session.revokedAt) {
-      await this.sessionAuditService.recordRefreshFailed(
-        session.id,
-        session.userId,
-        request,
-        'session_revoked',
-      );
-      return this.rejectSession(response);
-    }
-
-    if (session.expiresAt <= now) {
-      await this.prisma.session.update({
-        where: { id: session.id },
-        data: {
-          revokedAt: now,
-          revokedReason: SessionRevokedReason.EXPIRED,
-        },
-      });
-      await this.sessionAuditService.recordSessionExpired(
-        session.id,
-        session.userId,
-        request,
-      );
-      return this.rejectSession(response);
-    }
-
-    const validSecret = await compare(
-      parsedToken.refreshSecret,
-      session.refreshTokenHash,
+    const context = await this.loadAndValidateRefreshContext(
+      request,
+      response,
+      now,
     );
-    if (!validSecret) {
-      await this.sessionAuditService.recordRefreshFailed(
-        session.id,
-        session.userId,
-        request,
-        'invalid_refresh_secret',
-      );
-      throw new UnauthorizedException();
-    }
+    await this.handleConsumedRefreshToken(context, request, response, now);
 
-    const nextSecret = this.sessionTokenService.generateRefreshSecret();
-    const nextHash =
-      await this.sessionTokenService.hashRefreshSecret(nextSecret);
+    const nextCredential =
+      await this.sessionTokenService.issueRefreshCredential();
     const requestMetadata = this.sessionMetadataService.getFromRequest(request);
-    const rotated = await this.prisma.session.updateMany({
-      where: {
-        id: session.id,
-        refreshTokenHash: session.refreshTokenHash,
-        revokedAt: null,
-        expiresAt: { gt: now },
-      },
-      data: {
-        refreshTokenHash: nextHash,
-        lastUsedAt: now,
-        rotatedAt: now,
-        userAgent: requestMetadata.userAgent,
-        ipHash: requestMetadata.ipHash,
-      },
-    });
 
-    if (rotated.count !== 1) {
+    try {
+      await this.rotateRefreshCredentialAtomically(
+        context,
+        nextCredential,
+        requestMetadata,
+        now,
+      );
+    } catch (error) {
+      if (!(error instanceof SessionRotationConflictError)) throw error;
+
       await this.sessionAuditService.recordRefreshFailed(
-        session.id,
-        session.userId,
+        context.session.id,
+        context.session.userId,
         request,
         'concurrent_refresh_rotation',
       );
@@ -209,30 +186,30 @@ export class SessionService {
 
     this.sessionCookieService.setAuthCookies(
       response,
-      this.sessionTokenService.signAccessToken(session.userId),
-      `${session.id}.${nextSecret}`,
-      session.rememberMe,
+      this.sessionTokenService.signAccessToken(context.session.user.publicId),
+      `${context.session.id}.${nextCredential.credential}`,
+      context.session.rememberMe,
     );
 
     try {
       await this.sessionAuditService.recordRefreshMetadataChanges({
-        sessionId: session.id,
-        userId: session.userId,
-        previousIpHash: session.ipHash,
-        previousUserAgent: session.userAgent,
+        sessionId: context.session.id,
+        userId: context.session.userId,
+        previousIpHash: context.session.ipHash,
+        previousUserAgent: context.session.userAgent,
         currentMetadata: requestMetadata,
         request,
       });
       await this.sessionAuditService.recordRefreshSuccess(
-        session.id,
-        session.userId,
+        context.session.id,
+        context.session.userId,
         request,
       );
     } catch {
       this.logger.error('Failed to record successful session refresh audit');
     }
 
-    return user;
+    return context.session.user;
   }
 
   completePasswordChange(response: Response): void {
@@ -253,7 +230,10 @@ export class SessionService {
       const ownsSession =
         session &&
         !session.revokedAt &&
-        (await compare(parsedToken.refreshSecret, session.refreshTokenHash));
+        (await this.sessionTokenService.verifyRefreshCredential(
+          parsedToken.refreshCredential,
+          session.refreshTokenHash,
+        ));
 
       if (!ownsSession) return true;
 
@@ -301,24 +281,217 @@ export class SessionService {
     }
   }
 
-  private rejectSession(response: Response): never {
-    this.sessionCookieService.clearAuthCookies(response);
-    throw new UnauthorizedException();
+  private async loadAndValidateRefreshContext(
+    request: Request,
+    response: Response,
+    now: Date,
+  ): Promise<RefreshContext> {
+    const parsedToken = this.sessionTokenService.parseRefreshToken(
+      request.cookies?.[REFRESH_TOKEN_COOKIE],
+    );
+    if (!parsedToken) return this.rejectSession(response);
+
+    const session = await this.prisma.session.findUnique({
+      where: { id: parsedToken.sessionId },
+      include: { user: { select: authenticatedUserSelect } },
+    });
+    if (!session) return this.rejectSession(response);
+
+    await this.assertRefreshAllowed(session, request, response, now);
+
+    const refreshToken = parsedToken.tokenId
+      ? await this.prisma.sessionRefreshToken.findUnique({
+          where: { id: parsedToken.tokenId },
+        })
+      : null;
+    const credentialHash = parsedToken.tokenId
+      ? refreshToken?.credentialHash
+      : session.refreshTokenHash;
+
+    if (
+      !credentialHash ||
+      (refreshToken && refreshToken.sessionId !== session.id) ||
+      !(await this.sessionTokenService.verifyRefreshCredential(
+        parsedToken.refreshCredential,
+        credentialHash,
+      ))
+    ) {
+      await this.sessionAuditService.recordRefreshFailed(
+        session.id,
+        session.userId,
+        request,
+        'invalid_refresh_secret',
+      );
+      throw new UnauthorizedException();
+    }
+
+    return { credentialHash, parsedToken, refreshToken, session };
   }
 
-  private getAuthenticatedUser(userId: number) {
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-      select: authenticatedUserSelect,
+  private async assertRefreshAllowed(
+    session: RefreshSession,
+    request: Request,
+    response: Response,
+    now: Date,
+  ): Promise<void> {
+    if (session.revokedAt) {
+      await this.sessionAuditService.recordRefreshFailed(
+        session.id,
+        session.userId,
+        request,
+        'session_revoked',
+      );
+      return this.rejectSession(response);
+    }
+
+    if (session.expiresAt <= now) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: {
+          revokedAt: now,
+          revokedReason: SessionRevokedReason.EXPIRED,
+        },
+      });
+      await this.sessionAuditService.recordSessionExpired(
+        session.id,
+        session.userId,
+        request,
+      );
+      return this.rejectSession(response);
+    }
+  }
+
+  private async handleConsumedRefreshToken(
+    context: RefreshContext,
+    request: Request,
+    response: Response,
+    now: Date,
+  ): Promise<void> {
+    const consumedAt = context.refreshToken?.consumedAt;
+    if (!consumedAt) return;
+
+    const reuseAge = now.getTime() - consumedAt.getTime();
+    const isPreviousToken =
+      context.session.rotatedAt?.getTime() === consumedAt.getTime();
+
+    if (
+      isPreviousToken &&
+      reuseAge >= 0 &&
+      reuseAge <= REFRESH_REUSE_GRACE_MS
+    ) {
+      await this.sessionAuditService.recordRefreshFailed(
+        context.session.id,
+        context.session.userId,
+        request,
+        'concurrent_refresh_rotation',
+      );
+      throw new UnauthorizedException();
+    }
+
+    const revoked = await this.prisma.session.updateMany({
+      where: { id: context.session.id, revokedAt: null },
+      data: {
+        revokedAt: now,
+        revokedReason: SessionRevokedReason.REFRESH_REUSE,
+      },
+    });
+
+    if (revoked.count === 1) {
+      try {
+        await this.sessionAuditService.recordRefreshReuseDetected(
+          context.session.id,
+          context.session.userId,
+          request,
+        );
+      } catch {
+        this.logger.error('Failed to record refresh-token reuse audit');
+      }
+    }
+
+    return this.rejectSession(response);
+  }
+
+  private async rotateRefreshCredentialAtomically(
+    context: RefreshContext,
+    nextCredential: IssuedRefreshCredential,
+    requestMetadata: SessionRequestMetadata,
+    now: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      const rotated = await transaction.session.updateMany({
+        where: {
+          id: context.session.id,
+          refreshTokenHash: context.credentialHash,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: {
+          refreshTokenHash: nextCredential.hash,
+          lastUsedAt: now,
+          rotatedAt: now,
+          userAgent: requestMetadata.userAgent,
+          ipHash: requestMetadata.ipHash,
+        },
+      });
+      if (rotated.count !== 1) throw new SessionRotationConflictError();
+
+      if (context.parsedToken.tokenId) {
+        const consumed = await transaction.sessionRefreshToken.updateMany({
+          where: {
+            id: context.parsedToken.tokenId,
+            sessionId: context.session.id,
+            credentialHash: context.credentialHash,
+            consumedAt: null,
+          },
+          data: { consumedAt: now },
+        });
+        if (consumed.count !== 1) throw new SessionRotationConflictError();
+      } else {
+        // Legacy two-part cookies only have the hash stored on Session.
+        await transaction.sessionRefreshToken.updateMany({
+          where: { sessionId: context.session.id, consumedAt: null },
+          data: { consumedAt: now },
+        });
+        await transaction.sessionRefreshToken.upsert({
+          where: { id: context.session.id },
+          create: {
+            id: context.session.id,
+            sessionId: context.session.id,
+            credentialHash: context.credentialHash,
+            consumedAt: now,
+          },
+          update: { credentialHash: context.credentialHash, consumedAt: now },
+        });
+      }
+
+      await transaction.sessionRefreshToken.create({
+        data: {
+          id: nextCredential.tokenId,
+          sessionId: context.session.id,
+          credentialHash: nextCredential.hash,
+        },
+      });
     });
   }
 
   private async validateAccessToken(
-    accessToken: string,
+    request: Request,
   ): Promise<AuthenticatedUser | null> {
-    const payload =
-      await this.sessionTokenService.verifyAccessToken(accessToken);
+    const accessToken = request.cookies?.[ACCESS_TOKEN_COOKIE];
+    const payload = accessToken
+      ? await this.sessionTokenService.verifyAccessToken(accessToken)
+      : null;
 
-    return payload ? this.getAuthenticatedUser(payload.userId) : null;
+    return payload
+      ? this.prisma.user.findUnique({
+          where: { publicId: payload.subject },
+          select: authenticatedUserSelect,
+        })
+      : null;
+  }
+
+  private rejectSession(response: Response): never {
+    this.sessionCookieService.clearAuthCookies(response);
+    throw new UnauthorizedException();
   }
 }

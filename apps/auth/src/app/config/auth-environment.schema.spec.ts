@@ -5,7 +5,9 @@ const validEnvironment = {
   PORT: '3000',
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/pixaeron_auth',
   REDIS_URL: 'redis://localhost:6379',
-  JWT_SECRET: 'j'.repeat(32),
+  JWT_PRIVATE_KEY_BASE64: Buffer.alloc(512, 'k').toString('base64'),
+  JWT_ISSUER: 'https://api.pixaeron.com/auth',
+  JWT_AUDIENCE: 'pixaeron-api',
   JWT_EXPIRATION_MS: '900000',
   REFRESH_EXPIRATION_MS: '604800000',
   SESSION_REFRESH_EXPIRATION_MS: '86400000',
@@ -35,15 +37,18 @@ describe('authEnvironmentSchema', () => {
     expect(value.CAPTCHA_ENABLED).toBe('false');
   });
 
-  it('does not rewrite validated secret material', () => {
-    const jwtSecret = ` ${'j'.repeat(32)} `;
+  it('does not rewrite validated key and secret material', () => {
+    const privateKey = Buffer.alloc(512, 'p').toString('base64');
+    const ipHashSecret = ` ${'i'.repeat(32)} `;
     const { error, value } = validate({
       ...validEnvironment,
-      JWT_SECRET: jwtSecret,
+      JWT_PRIVATE_KEY_BASE64: privateKey,
+      IP_HASH_SECRET: ipHashSecret,
     });
 
     expect(error).toBeUndefined();
-    expect(value.JWT_SECRET).toBe(jwtSecret);
+    expect(value.JWT_PRIVATE_KEY_BASE64).toBe(privateKey);
+    expect(value.IP_HASH_SECRET).toBe(ipHashSecret);
   });
 
   it('does not echo a rejected CORS value in the startup error', () => {
@@ -74,7 +79,9 @@ describe('authEnvironmentSchema', () => {
     'PORT',
     'DATABASE_URL',
     'REDIS_URL',
-    'JWT_SECRET',
+    'JWT_PRIVATE_KEY_BASE64',
+    'JWT_ISSUER',
+    'JWT_AUDIENCE',
     'JWT_EXPIRATION_MS',
     'REFRESH_EXPIRATION_MS',
     'SESSION_REFRESH_EXPIRATION_MS',
@@ -99,7 +106,9 @@ describe('authEnvironmentSchema', () => {
       ...validEnvironment,
       DATABASE_URL: 'mysql://localhost/database',
       REDIS_URL: 'http://localhost:6379',
-      JWT_SECRET: 'short',
+      JWT_PRIVATE_KEY_BASE64: 'not-base64',
+      JWT_ISSUER: 'ftp://api.pixaeron.com/auth',
+      JWT_AUDIENCE: 'pixaeron api',
       IP_HASH_SECRET: 'short',
       CORS_ORIGINS: '*',
       GOOGLE_CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
@@ -110,7 +119,9 @@ describe('authEnvironmentSchema', () => {
       expect.arrayContaining([
         'DATABASE_URL',
         'REDIS_URL',
-        'JWT_SECRET',
+        'JWT_PRIVATE_KEY_BASE64',
+        'JWT_ISSUER',
+        'JWT_AUDIENCE',
         'IP_HASH_SECRET',
         'CORS_ORIGINS',
         'GOOGLE_CLIENT_ID',

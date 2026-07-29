@@ -111,6 +111,13 @@ export class AuthResolver {
   }
 
   @Mutation(() => Boolean)
+  @Throttle(AUTH_RATE_LIMIT)
+  async refreshSession(@Context() context: HttpContext) {
+    await this.sessionService.refreshSession(context.req, context.res);
+    return true;
+  }
+
+  @Mutation(() => Boolean)
   logout(@Context() context: HttpContext) {
     return this.sessionService.logout(context.req, context.res);
   }

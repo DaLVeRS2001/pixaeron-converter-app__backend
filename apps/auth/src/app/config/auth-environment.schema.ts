@@ -15,6 +15,8 @@ const secret = Joi.string()
     'string.pattern.base': '{{#label}} must be replaced with a random secret',
   });
 
+const encodedKey = Joi.string().base64().raw();
+
 const corsOrigins = Joi.string()
   .trim()
   .min(1)
@@ -76,7 +78,12 @@ export const authEnvironmentSchema = Joi.object({
   REDIS_URL: Joi.string()
     .uri({ scheme: ['redis', 'rediss'] })
     .required(),
-  JWT_SECRET: secret,
+  JWT_PRIVATE_KEY_BASE64: encodedKey.required(),
+  JWT_PREVIOUS_PUBLIC_KEY_BASE64: encodedKey.optional(),
+  JWT_ISSUER: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .required(),
+  JWT_AUDIENCE: Joi.string().trim().min(1).max(255).pattern(/^\S+$/).required(),
   IP_HASH_SECRET: secret,
   CORS_ORIGINS: corsOrigins,
 

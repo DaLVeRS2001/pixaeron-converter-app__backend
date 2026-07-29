@@ -77,6 +77,19 @@ export class SessionAuditService {
     });
   }
 
+  recordRefreshReuseDetected(
+    sessionId: string,
+    userId: number,
+    request: Request,
+  ) {
+    return this.createEvent({
+      type: SessionEventType.REFRESH_REUSE_DETECTED,
+      sessionId,
+      userId,
+      request,
+    });
+  }
+
   recordSessionExpired(sessionId: string, userId: number, request: Request) {
     return this.createEvent({
       type: SessionEventType.SESSION_EXPIRED,

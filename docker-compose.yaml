@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: pixaeron_auth
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5433:5432'
     volumes:
       - postgres18_data:/var/lib/postgresql
     healthcheck:
