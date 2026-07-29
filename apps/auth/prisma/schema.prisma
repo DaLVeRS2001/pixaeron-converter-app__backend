@@ -119,6 +119,7 @@ model Account {
 model Session {
   id               String                @id @default(uuid())
   userId           Int                   @map("user_id")
+  // Kept during the rollout so the previous Auth binary can still refresh and roll back safely.
   refreshTokenHash String                @map("refresh_token_hash")
   expiresAt        DateTime              @map("expires_at")
   revokedAt        DateTime?             @map("revoked_at")
@@ -131,13 +132,27 @@ model Session {
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
 
-  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events SessionEvent[]
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events        SessionEvent[]
+  refreshTokens SessionRefreshToken[]
 
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
   @@map("sessions")
+}
+
+model SessionRefreshToken {
+  id             String    @id @default(uuid())
+  sessionId      String    @map("session_id")
+  credentialHash String    @map("secret_hash")
+  consumedAt     DateTime? @map("consumed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_refresh_tokens")
 }
 
 model SessionEvent {

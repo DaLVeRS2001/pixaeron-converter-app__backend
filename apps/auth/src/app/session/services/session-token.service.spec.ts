@@ -76,6 +76,31 @@ function signWithActive(options: {
   );
 }
 
+describe('SessionTokenService refresh tokens', () => {
+  it('parses legacy and tracked refresh credentials', () => {
+    expect(service.parseRefreshToken('session.secret')).toEqual({
+      sessionId: 'session',
+      refreshCredential: 'secret',
+    });
+    expect(service.parseRefreshToken('session.token.secret')).toEqual({
+      sessionId: 'session',
+      tokenId: 'token',
+      refreshCredential: 'token.secret',
+    });
+  });
+
+  it.each([
+    undefined,
+    '',
+    '.secret',
+    'session.',
+    'session.token.',
+    'too.many.parts.here',
+  ])('rejects malformed refresh token %p', (token) => {
+    expect(service.parseRefreshToken(token)).toBeNull();
+  });
+});
+
 describe('SessionTokenService access tokens', () => {
   it('issues and verifies the Pixaeron access-token profile', async () => {
     const token = service.signAccessToken(subject);

@@ -30,6 +30,12 @@ type DecodedAccessToken = {
   };
 };
 
+type ParsedRefreshToken = {
+  sessionId: string;
+  tokenId?: string;
+  refreshCredential: string;
+};
+
 @Injectable()
 export class SessionTokenService {
   private readonly audience: string;
@@ -115,27 +121,32 @@ export class SessionTokenService {
     }
   }
 
-  parseRefreshToken(refreshToken?: string) {
-    if (!refreshToken) return null;
+  parseRefreshToken(refreshToken?: string): ParsedRefreshToken | null {
+    const parts = refreshToken?.split('.');
+    if (!parts || !parts.every(Boolean)) return null;
 
-    const separatorIndex = refreshToken.indexOf('.');
+    if (parts.length === 2) {
+      return { sessionId: parts[0], refreshCredential: parts[1] };
+    }
 
-    if (separatorIndex <= 0 || separatorIndex === refreshToken.length - 1)
-      return null;
+    if (parts.length === 3) {
+      return {
+        sessionId: parts[0],
+        tokenId: parts[1],
+        refreshCredential: `${parts[1]}.${parts[2]}`,
+      };
+    }
 
-    return {
-      sessionId: refreshToken.slice(0, separatorIndex),
-      refreshSecret: refreshToken.slice(separatorIndex + 1),
-    };
+    return null;
   }
 
   generateRefreshSecret(): string {
     return randomBytes(64).toString('base64url');
   }
 
-  hashRefreshSecret(refreshSecret: string): Promise<string> {
+  hashRefreshCredential(refreshCredential: string): Promise<string> {
     return hash(
-      refreshSecret,
+      refreshCredential,
       Number(this.configService.getOrThrow('REFRESH_TOKEN_HASH_ROUNDS')),
     );
   }

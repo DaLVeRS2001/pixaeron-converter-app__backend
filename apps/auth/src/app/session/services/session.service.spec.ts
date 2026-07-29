@@ -6,6 +6,7 @@ import { SessionRevokedReason } from '../../../generated/prisma/client';
 import { authenticatedUserSelect } from '../../user/prisma/user.select';
 import {
   ACCESS_TOKEN_COOKIE,
+  REFRESH_REUSE_GRACE_MS,
   REFRESH_TOKEN_COOKIE,
 } from '../constants/session.constants';
 import { SessionService } from './session.service';
@@ -23,10 +24,18 @@ const user = {
   updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 };
 
+const activeRefreshToken = {
+  id: 'refresh-token-id',
+  sessionId: 'session-id',
+  credentialHash: 'current-hash',
+  consumedAt: null,
+};
+
 const activeSession = {
   id: 'session-id',
   userId: user.id,
   refreshTokenHash: 'current-hash',
+  rotatedAt: new Date('2026-01-01T00:00:00.000Z'),
   expiresAt: new Date('2099-01-01T00:00:00.000Z'),
   revokedAt: null,
   rememberMe: true,
@@ -44,13 +53,19 @@ describe('SessionService', () => {
       update: jest.fn(),
       updateMany: jest.fn(),
     },
+    sessionRefreshToken: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+      upsert: jest.fn(),
+    },
     user: { findUnique: jest.fn() },
   };
   const tokens = {
     parseRefreshToken: jest.fn(),
     verifyAccessToken: jest.fn(),
     generateRefreshSecret: jest.fn(),
-    hashRefreshSecret: jest.fn(),
+    hashRefreshCredential: jest.fn(),
     signAccessToken: jest.fn(),
     getRefreshExpiresAt: jest.fn(),
   };
@@ -66,10 +81,13 @@ describe('SessionService', () => {
     recordRefreshFailed: jest.fn(),
     recordSessionExpired: jest.fn(),
     recordRefreshMetadataChanges: jest.fn(),
+    recordRefreshReuseDetected: jest.fn(),
     recordRefreshSuccess: jest.fn(),
   };
   const request = {
-    cookies: { [REFRESH_TOKEN_COOKIE]: 'session-id.current-secret' },
+    cookies: {
+      [REFRESH_TOKEN_COOKIE]: 'session-id.refresh-token-id.current-secret',
+    },
   } as unknown as Request;
   const response = {} as Response;
   const service = new SessionService(
@@ -80,17 +98,26 @@ describe('SessionService', () => {
     audit as never,
   );
 
+  function lastHashedCredential(): string {
+    const calls = tokens.hashRefreshCredential.mock.calls;
+    return calls[calls.length - 1][0] as string;
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.$transaction.mockImplementation(
       (callback: (transaction: typeof prisma) => unknown) => callback(prisma),
     );
+    prisma.session.updateMany.mockResolvedValue({ count: 1 });
+    prisma.sessionRefreshToken.findUnique.mockResolvedValue(activeRefreshToken);
+    prisma.sessionRefreshToken.updateMany.mockResolvedValue({ count: 1 });
     tokens.parseRefreshToken.mockReturnValue({
       sessionId: activeSession.id,
-      refreshSecret: 'current-secret',
+      tokenId: activeRefreshToken.id,
+      refreshCredential: `${activeRefreshToken.id}.current-secret`,
     });
     tokens.generateRefreshSecret.mockReturnValue('next-secret');
-    tokens.hashRefreshSecret.mockResolvedValue('next-hash');
+    tokens.hashRefreshCredential.mockResolvedValue('next-hash');
     tokens.signAccessToken.mockReturnValue('next-access-token');
     tokens.getRefreshExpiresAt.mockReturnValue(activeSession.expiresAt);
     metadata.getFromRequest.mockReturnValue({
@@ -98,12 +125,13 @@ describe('SessionService', () => {
       ipHash: 'new-ip',
     });
     audit.recordRefreshMetadataChanges.mockResolvedValue(undefined);
+    audit.recordRefreshReuseDetected.mockResolvedValue(undefined);
     audit.recordRefreshSuccess.mockResolvedValue(undefined);
     audit.recordRefreshFailed.mockResolvedValue(undefined);
     audit.recordSessionStarted.mockResolvedValue(undefined);
   });
 
-  it('signs a new session access token with the public user subject', async () => {
+  it('creates a tracked refresh token for a new session', async () => {
     prisma.user.findUnique.mockResolvedValue(user);
     prisma.session.create.mockResolvedValue(activeSession);
 
@@ -111,14 +139,27 @@ describe('SessionService', () => {
       service.createSession(user.id, request, response, 'LOGIN_SUCCESS', true),
     ).resolves.toBe(user);
 
+    const credential = lastHashedCredential();
+    const tokenId = credential.split('.')[0];
+    expect(credential).toBe(`${tokenId}.next-secret`);
+    expect(prisma.session.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: user.id,
+        refreshTokenHash: 'next-hash',
+        refreshTokens: {
+          create: { id: tokenId, credentialHash: 'next-hash' },
+        },
+      }),
+    });
     expect(tokens.signAccessToken).toHaveBeenCalledWith(user.publicId);
     expect(cookies.setAuthCookies).toHaveBeenCalledWith(
       response,
       'next-access-token',
-      'session-id.next-secret',
+      `session-id.${credential}`,
       true,
     );
   });
+
   it('authenticates a valid access token without rotating the refresh token', async () => {
     const accessRequest = {
       cookies: { [ACCESS_TOKEN_COOKIE]: 'access-token' },
@@ -154,29 +195,29 @@ describe('SessionService', () => {
     tokens.verifyAccessToken.mockResolvedValue(null);
     prisma.session.findUnique.mockResolvedValue(activeSession);
     (compare as jest.Mock).mockResolvedValue(true);
-    prisma.session.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(service.authenticateRequest(request, response)).resolves.toBe(
       user,
     );
 
     expect(tokens.parseRefreshToken).toHaveBeenCalledWith(
-      'session-id.current-secret',
+      'session-id.refresh-token-id.current-secret',
     );
     expect(cookies.setAuthCookies).toHaveBeenCalledTimes(1);
   });
 
-  it('rotates an active refresh token with a compare-and-swap update', async () => {
+  it('rotates a tracked refresh token atomically', async () => {
     prisma.session.findUnique.mockResolvedValue(activeSession);
     (compare as jest.Mock).mockResolvedValue(true);
-    prisma.session.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(service.refreshSession(request, response)).resolves.toBe(user);
 
+    const nextCredential = lastHashedCredential();
+    const nextTokenId = nextCredential.split('.')[0];
     expect(prisma.session.updateMany).toHaveBeenCalledWith({
       where: {
         id: activeSession.id,
-        refreshTokenHash: activeSession.refreshTokenHash,
+        refreshTokenHash: activeRefreshToken.credentialHash,
         revokedAt: null,
         expiresAt: { gt: expect.any(Date) },
       },
@@ -188,20 +229,73 @@ describe('SessionService', () => {
         ipHash: 'new-ip',
       },
     });
+    expect(prisma.sessionRefreshToken.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: activeRefreshToken.id,
+        sessionId: activeSession.id,
+        credentialHash: activeRefreshToken.credentialHash,
+        consumedAt: null,
+      },
+      data: { consumedAt: expect.any(Date) },
+    });
+    expect(prisma.sessionRefreshToken.create).toHaveBeenCalledWith({
+      data: {
+        id: nextTokenId,
+        sessionId: activeSession.id,
+        credentialHash: 'next-hash',
+      },
+    });
     expect(tokens.signAccessToken).toHaveBeenCalledWith(user.publicId);
     expect(cookies.setAuthCookies).toHaveBeenCalledWith(
       response,
       'next-access-token',
-      'session-id.next-secret',
+      `session-id.${nextCredential}`,
       true,
     );
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
   });
 
-  it('does not clear winner cookies when it loses a concurrent rotation', async () => {
+  it('upgrades a legacy refresh cookie during rotation', async () => {
+    tokens.parseRefreshToken.mockReturnValue({
+      sessionId: activeSession.id,
+      refreshCredential: 'legacy-secret',
+    });
     prisma.session.findUnique.mockResolvedValue(activeSession);
     (compare as jest.Mock).mockResolvedValue(true);
+
+    await expect(service.refreshSession(request, response)).resolves.toBe(user);
+
+    const nextCredential = lastHashedCredential();
+    expect(prisma.sessionRefreshToken.findUnique).not.toHaveBeenCalled();
+    expect(prisma.sessionRefreshToken.updateMany).toHaveBeenCalledWith({
+      where: { sessionId: activeSession.id, consumedAt: null },
+      data: { consumedAt: expect.any(Date) },
+    });
+    expect(prisma.sessionRefreshToken.upsert).toHaveBeenCalledWith({
+      where: { id: activeSession.id },
+      create: {
+        id: activeSession.id,
+        sessionId: activeSession.id,
+        credentialHash: activeSession.refreshTokenHash,
+        consumedAt: expect.any(Date),
+      },
+      update: {
+        credentialHash: activeSession.refreshTokenHash,
+        consumedAt: expect.any(Date),
+      },
+    });
+    expect(cookies.setAuthCookies).toHaveBeenCalledWith(
+      response,
+      'next-access-token',
+      `session-id.${nextCredential}`,
+      true,
+    );
+  });
+
+  it('does not clear winner cookies when session rotation loses CAS', async () => {
+    prisma.session.findUnique.mockResolvedValue(activeSession);
     prisma.session.updateMany.mockResolvedValue({ count: 0 });
+    (compare as jest.Mock).mockResolvedValue(true);
 
     await expect(service.refreshSession(request, response)).rejects.toThrow(
       UnauthorizedException,
@@ -213,11 +307,112 @@ describe('SessionService', () => {
       request,
       'concurrent_refresh_rotation',
     );
-    expect(prisma.session.updateMany).toHaveBeenCalledTimes(1);
-    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(prisma.sessionRefreshToken.updateMany).not.toHaveBeenCalled();
     expect(cookies.setAuthCookies).not.toHaveBeenCalled();
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
   });
+
+  it('does not issue tokens when refresh-token consumption loses CAS', async () => {
+    prisma.session.findUnique.mockResolvedValue(activeSession);
+    prisma.sessionRefreshToken.updateMany.mockResolvedValue({ count: 0 });
+    (compare as jest.Mock).mockResolvedValue(true);
+
+    await expect(service.refreshSession(request, response)).rejects.toThrow(
+      UnauthorizedException,
+    );
+
+    expect(audit.recordRefreshFailed).toHaveBeenCalledWith(
+      activeSession.id,
+      activeSession.userId,
+      request,
+      'concurrent_refresh_rotation',
+    );
+    expect(prisma.sessionRefreshToken.create).not.toHaveBeenCalled();
+    expect(cookies.setAuthCookies).not.toHaveBeenCalled();
+    expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
+  });
+
+  it('allows a short grace window only for the immediate previous token', async () => {
+    const consumedAt = new Date(Date.now() - 1_000);
+    prisma.session.findUnique.mockResolvedValue({
+      ...activeSession,
+      rotatedAt: consumedAt,
+    });
+    prisma.sessionRefreshToken.findUnique.mockResolvedValue({
+      ...activeRefreshToken,
+      consumedAt,
+    });
+    (compare as jest.Mock).mockResolvedValue(true);
+
+    await expect(service.refreshSession(request, response)).rejects.toThrow(
+      UnauthorizedException,
+    );
+
+    expect(audit.recordRefreshFailed).toHaveBeenCalledWith(
+      activeSession.id,
+      activeSession.userId,
+      request,
+      'concurrent_refresh_rotation',
+    );
+    expect(prisma.session.updateMany).not.toHaveBeenCalled();
+    expect(audit.recordRefreshReuseDetected).not.toHaveBeenCalled();
+    expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'an immediate previous token after grace',
+      -REFRESH_REUSE_GRACE_MS - 1_000,
+      true,
+    ],
+    ['an older family token inside grace', -1_000, false],
+  ])(
+    'revokes the token family for %s',
+    async (_case, consumedOffset, isPrevious) => {
+      const now = Date.now();
+      const consumedAt = new Date(now + consumedOffset);
+      const rotatedAt = isPrevious ? consumedAt : new Date(now - 500);
+      prisma.session.findUnique.mockResolvedValue({
+        ...activeSession,
+        rotatedAt,
+      });
+      prisma.sessionRefreshToken.findUnique.mockResolvedValue({
+        ...activeRefreshToken,
+        consumedAt,
+      });
+      audit.recordRefreshReuseDetected.mockRejectedValue(
+        new Error('audit unavailable'),
+      );
+      (compare as jest.Mock).mockResolvedValue(true);
+      const logger = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+
+      try {
+        await expect(service.refreshSession(request, response)).rejects.toThrow(
+          UnauthorizedException,
+        );
+
+        expect(prisma.session.updateMany).toHaveBeenCalledWith({
+          where: { id: activeSession.id, revokedAt: null },
+          data: {
+            revokedAt: expect.any(Date),
+            revokedReason: SessionRevokedReason.REFRESH_REUSE,
+          },
+        });
+        expect(audit.recordRefreshReuseDetected).toHaveBeenCalledWith(
+          activeSession.id,
+          activeSession.userId,
+          request,
+        );
+        expect(logger).toHaveBeenCalledWith(
+          'Failed to record refresh-token reuse audit',
+        );
+        expect(cookies.setAuthCookies).not.toHaveBeenCalled();
+        expect(cookies.clearAuthCookies).toHaveBeenCalledWith(response);
+      } finally {
+        logger.mockRestore();
+      }
+    },
+  );
 
   it('does not revoke a session for an unproven refresh secret', async () => {
     prisma.session.findUnique.mockResolvedValue(activeSession);
@@ -235,6 +430,7 @@ describe('SessionService', () => {
     );
     expect(prisma.session.update).not.toHaveBeenCalled();
     expect(prisma.session.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sessionRefreshToken.updateMany).not.toHaveBeenCalled();
     expect(cookies.setAuthCookies).not.toHaveBeenCalled();
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
   });
@@ -242,23 +438,27 @@ describe('SessionService', () => {
   it('keeps a successful rotation when best-effort audit fails', async () => {
     prisma.session.findUnique.mockResolvedValue(activeSession);
     (compare as jest.Mock).mockResolvedValue(true);
-    prisma.session.updateMany.mockResolvedValue({ count: 1 });
     audit.recordRefreshMetadataChanges.mockRejectedValue(
       new Error('audit unavailable'),
     );
     const logger = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
-    await expect(service.refreshSession(request, response)).resolves.toBe(user);
+    try {
+      await expect(service.refreshSession(request, response)).resolves.toBe(
+        user,
+      );
 
-    expect(cookies.setAuthCookies).toHaveBeenCalledTimes(1);
-    expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
-    expect(cookies.setAuthCookies.mock.invocationCallOrder[0]).toBeLessThan(
-      audit.recordRefreshMetadataChanges.mock.invocationCallOrder[0],
-    );
-    expect(logger).toHaveBeenCalledWith(
-      'Failed to record successful session refresh audit',
-    );
-    logger.mockRestore();
+      expect(cookies.setAuthCookies).toHaveBeenCalledTimes(1);
+      expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
+      expect(cookies.setAuthCookies.mock.invocationCallOrder[0]).toBeLessThan(
+        audit.recordRefreshMetadataChanges.mock.invocationCallOrder[0],
+      );
+      expect(logger).toHaveBeenCalledWith(
+        'Failed to record successful session refresh audit',
+      );
+    } finally {
+      logger.mockRestore();
+    }
   });
 
   it('revokes an expired session and clears its cookies', async () => {
