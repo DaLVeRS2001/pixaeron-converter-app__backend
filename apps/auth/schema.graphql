@@ -91,7 +91,7 @@ enum PasswordResetStatus {
 }
 
 type Query {
-  me: User!
+  me: User! @authenticated
   _service: _Service!
 }
 
@@ -105,7 +105,7 @@ type Mutation {
   googleLogin(googleLoginInput: GoogleLoginInput!): User!
   refreshSession: Boolean!
   logout: Boolean!
-  logoutAll: Boolean!
+  logoutAll: Boolean! @authenticated
 }
 
 input LoginInput {

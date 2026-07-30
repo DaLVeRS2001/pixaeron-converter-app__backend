@@ -6,6 +6,7 @@ export type {
 export {
   Args,
   Context,
+  Directive,
   Field,
   GqlExecutionContext,
   GraphQLModule,

@@ -1,6 +1,12 @@
 import { UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { Args, Context, Mutation, Resolver } from '@pixaeron/graphql';
+import {
+  Args,
+  Context,
+  Directive,
+  Mutation,
+  Resolver,
+} from '@pixaeron/graphql';
 import { HttpContext } from '@pixaeron/nestjs';
 
 import { AUTH_RATE_LIMIT } from './constants/rate-limit.constants';
@@ -123,6 +129,7 @@ export class AuthResolver {
   }
 
   @UseGuards(GqlSessionAuthGuard)
+  @Directive('@authenticated')
   @Mutation(() => Boolean)
   logoutAll(
     @Context('req') request: HttpContext['req'] & { user: AuthenticatedUser },

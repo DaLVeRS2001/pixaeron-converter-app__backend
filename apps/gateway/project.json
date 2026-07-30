@@ -1,0 +1,23 @@
+{
+  "name": "gateway",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "implicitDependencies": ["auth"],
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "dependsOn": [
+        {
+          "projects": ["auth"],
+          "target": "schema-check"
+        }
+      ],
+      "options": {
+        "command": "docker build --file apps/gateway/Dockerfile --tag pixaeron-gateway:local .",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}
