@@ -10,15 +10,11 @@ export class GqlSessionAuthGuard implements CanActivate {
   constructor(private readonly sessionService: SessionService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const ctx = GqlExecutionContext.create(context);
-    const gqlContext = ctx.getContext<HttpContext>();
-    const user = await this.sessionService.authenticateRequest(
-      gqlContext.req,
-      gqlContext.res,
-    );
+    const request =
+      GqlExecutionContext.create(context).getContext<HttpContext>().req;
+    const user = await this.sessionService.authenticateAccessToken(request);
 
-    (gqlContext.req as HttpContext['req'] & { user: AuthenticatedUser }).user =
-      user;
+    (request as HttpContext['req'] & { user: AuthenticatedUser }).user = user;
 
     return true;
   }

@@ -1,6 +1,7 @@
 [
   {
     "project": "auth",
+    "deploymentOrder": 10,
     "imageName": "ghcr.io/dalvers2001/pixaeron-auth",
     "dockerfile": "apps/auth/Dockerfile",
     "composeService": "auth",
@@ -14,5 +15,17 @@
     ],
     "runtimeEnvFileEnv": "AUTH_RUNTIME_ENV_FILE",
     "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/auth/prisma.config.ts"
+  },
+  {
+    "project": "gateway",
+    "deploymentOrder": 100,
+    "imageName": "ghcr.io/dalvers2001/pixaeron-gateway",
+    "dockerfile": "apps/gateway/Dockerfile",
+    "composeService": "gateway",
+    "imageTagEnv": "GATEWAY_IMAGE_TAG",
+    "ssmPath": "/pixaeron/production/gateway",
+    "secureParameters": ["APOLLO_KEY"],
+    "runtimeEnvFileEnv": "GATEWAY_RUNTIME_ENV_FILE",
+    "migrationCommand": ""
   }
 ]

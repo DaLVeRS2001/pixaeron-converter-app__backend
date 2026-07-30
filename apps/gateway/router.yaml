@@ -1,0 +1,86 @@
+supergraph:
+  listen: 0.0.0.0:4000
+  path: /graphql
+  introspection: false
+
+health_check:
+  listen: 0.0.0.0:8088
+  path: /health
+
+cors:
+  policies:
+    - origins:
+        - ${env.FRONTEND_ORIGIN}
+  allow_credentials: true
+
+headers:
+  subgraphs:
+    auth:
+      request:
+        operations:
+          - propagate:
+              named: cookie
+          - propagate:
+              named: user-agent
+          - propagate:
+              named: x-forwarded-for
+          - propagate:
+              named: x-forwarded-host
+          - propagate:
+              named: x-forwarded-proto
+
+authentication:
+  router:
+    jwt:
+      jwks:
+        - url: http://auth:3000/auth/.well-known/jwks.json
+          issuers:
+            - ${env.JWT_ISSUER}
+          audiences:
+            - ${env.JWT_AUDIENCE}
+          algorithms:
+            - RS256
+      sources:
+        - type: cookie
+          name: Authentication
+      on_error: Continue
+
+authorization:
+  directives:
+    enabled: true
+    reject_unauthorized: true
+
+include_subgraph_errors:
+  all:
+    redact_message: true
+    allow_extensions_keys: []
+  subgraphs:
+    auth:
+      redact_message: false
+      allow_extensions_keys:
+        - code
+        - action
+        - retryAfter
+
+homepage:
+  enabled: false
+
+sandbox:
+  enabled: false
+
+telemetry:
+  apollo:
+    field_level_instrumentation_sampler: always_off
+    send_headers: none
+    send_variable_values: none
+    errors:
+      subgraph:
+        all:
+          send: false
+  exporters:
+    tracing:
+      common:
+        sampler: 0
+
+rhai:
+  main: /dist/rhai/main.rhai

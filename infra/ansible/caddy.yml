@@ -79,24 +79,111 @@
         state: present
         update_cache: '{{ caddy_repository.changed or cloudflared_repository.changed }}'
 
-    - name: Install the Caddy configuration
-      ansible.builtin.template:
-        src: templates/Caddyfile.j2
-        dest: /etc/caddy/Caddyfile
-        owner: root
-        group: caddy
-        mode: '0644'
-        validate: /usr/bin/caddy validate --config %s --adapter caddyfile
-      notify: Reload Caddy
+    - name: Verify the Gateway is ready before cutover
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8088/health?ready
+        status_code: 200
+        return_content: false
+      changed_when: false
 
-    - name: Enable Caddy
-      ansible.builtin.systemd_service:
-        name: caddy
-        enabled: true
-        state: started
+    - name: Verify the private Auth JWKS before cutover
+      ansible.builtin.uri:
+        url: http://127.0.0.1:3000/auth/.well-known/jwks.json
+        status_code: 200
+        return_content: true
+      register: auth_jwks_check
+      changed_when: false
 
-    - name: Apply the Caddy configuration before starting the Tunnel
-      ansible.builtin.meta: flush_handlers
+    - name: Require at least one Auth public key before cutover
+      ansible.builtin.assert:
+        that:
+          - >-
+            auth_jwks_check.json is mapping and
+            (auth_jwks_check.json.get('keys', []) | length) > 0
+        fail_msg: Auth JWKS must contain at least one public key before Caddy cutover.
+
+    - name: Cut over Caddy to Gateway
+      block:
+        - name: Install the Caddy configuration
+          ansible.builtin.template:
+            src: templates/Caddyfile.j2
+            dest: /etc/caddy/Caddyfile
+            owner: root
+            group: caddy
+            mode: '0644'
+            backup: true
+            validate: /usr/bin/caddy validate --config %s --adapter caddyfile
+          register: caddy_configuration
+
+        - name: Enable and reload Caddy
+          ansible.builtin.systemd_service:
+            name: caddy
+            enabled: true
+            state: reloaded
+
+        - name: Verify the Gateway to Auth path through Caddy
+          ansible.builtin.uri:
+            url: http://127.0.0.1:8080/graphql
+            method: POST
+            headers:
+              Host: '{{ api_domain }}'
+            body_format: json
+            body:
+              query: 'mutation GatewayAuthPath { refreshSession }'
+            status_code: 200
+            return_content: true
+          register: gateway_auth_path_check
+          changed_when: false
+
+        - name: Require the expected unauthenticated Auth response
+          ansible.builtin.assert:
+            that:
+              - >-
+                gateway_auth_path_check.json is mapping and
+                'UNAUTHENTICATED' in (
+                  gateway_auth_path_check.json.get('errors', [])
+                  | map(attribute='extensions.code', default='')
+                  | list
+                )
+            fail_msg: >-
+              Caddy did not route the refresh mutation through Gateway to Auth.
+      rescue:
+        - name: Restore the previous Caddy configuration
+          ansible.builtin.copy:
+            remote_src: true
+            src: '{{ caddy_configuration.backup_file }}'
+            dest: /etc/caddy/Caddyfile
+            owner: root
+            group: caddy
+            mode: '0644'
+          when:
+            - caddy_configuration is defined
+            - (caddy_configuration.backup_file | default('') | length) > 0
+
+        - name: Restart Caddy with the previous configuration
+          ansible.builtin.systemd_service:
+            name: caddy
+            enabled: true
+            state: restarted
+          when:
+            - caddy_configuration is defined
+            - (caddy_configuration.backup_file | default('') | length) > 0
+
+        - name: Stop after the rolled-back Caddy cutover
+          ansible.builtin.fail:
+            msg: >-
+              Gateway cutover failed during "{{ ansible_failed_task.name }}".
+              The previous Caddy configuration was restored and Caddy was
+              restarted.
+          when:
+            - caddy_configuration is defined
+            - (caddy_configuration.backup_file | default('') | length) > 0
+
+        - name: Stop after the Caddy cutover failed without a backup
+          ansible.builtin.fail:
+            msg: >-
+              Gateway cutover failed during "{{ ansible_failed_task.name }}".
+              No Caddy backup was created, so no rollback was applied.
 
     - name: Install the Cloudflare Tunnel service
       ansible.builtin.command:
@@ -114,18 +201,3 @@
         enabled: true
         state: started
         daemon_reload: true
-
-    - name: Verify the local Caddy listener
-      ansible.builtin.uri:
-        url: http://127.0.0.1:8080/unknown
-        headers:
-          Host: '{{ api_domain }}'
-        status_code: 404
-        return_content: false
-      changed_when: false
-
-  handlers:
-    - name: Reload Caddy
-      ansible.builtin.systemd_service:
-        name: caddy
-        state: reloaded

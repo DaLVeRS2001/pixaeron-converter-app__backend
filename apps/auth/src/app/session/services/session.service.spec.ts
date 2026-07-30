@@ -189,20 +189,6 @@ describe('SessionService', () => {
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
   });
 
-  it('keeps implicit refresh during the staged frontend rollout', async () => {
-    tokens.verifyAccessToken.mockResolvedValue(null);
-    prisma.session.findUnique.mockResolvedValue(activeSession);
-
-    await expect(service.authenticateRequest(request, response)).resolves.toBe(
-      user,
-    );
-
-    expect(tokens.parseRefreshToken).toHaveBeenCalledWith(
-      'session-id.refresh-token-id.current-secret',
-    );
-    expect(cookies.setAuthCookies).toHaveBeenCalledTimes(1);
-  });
-
   it('rotates a tracked refresh token atomically', async () => {
     prisma.session.findUnique.mockResolvedValue(activeSession);
 

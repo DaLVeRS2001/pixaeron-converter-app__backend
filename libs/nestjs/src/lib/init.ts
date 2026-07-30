@@ -10,7 +10,7 @@ export function configureHttp(app: INestApplication) {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  // Caddy overwrites X-Forwarded-For before Docker forwards the request.
+  // Caddy overwrites X-Forwarded-For; Gateway propagates that single trusted value.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   app.enableCors({

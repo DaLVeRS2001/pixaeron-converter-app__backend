@@ -134,14 +134,6 @@ export class SessionService {
     return user;
   }
 
-  async authenticateRequest(
-    request: Request,
-    response: Response,
-  ): Promise<AuthenticatedUser> {
-    const user = await this.validateAccessToken(request);
-    return user ?? this.refreshSession(request, response);
-  }
-
   async authenticateAccessToken(request: Request): Promise<AuthenticatedUser> {
     const user = await this.validateAccessToken(request);
     if (!user) throw new UnauthorizedException();
