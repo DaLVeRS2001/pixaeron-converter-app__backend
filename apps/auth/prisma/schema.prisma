@@ -119,7 +119,7 @@ model Account {
 model Session {
   id               String                @id @default(uuid())
   userId           Int                   @map("user_id")
-  // Kept during the rollout so the previous Auth binary can still refresh and roll back safely.
+  // Active credential hash used by session-level compare-and-swap rotation.
   refreshTokenHash String                @map("refresh_token_hash")
   expiresAt        DateTime              @map("expires_at")
   revokedAt        DateTime?             @map("revoked_at")

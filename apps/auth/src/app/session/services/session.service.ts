@@ -39,7 +39,7 @@ type RefreshSession = Session & { user: AuthenticatedUser };
 type RefreshContext = {
   credentialHash: string;
   parsedToken: ParsedRefreshToken;
-  refreshToken: SessionRefreshToken | null;
+  refreshToken: SessionRefreshToken;
   session: RefreshSession;
 };
 
@@ -291,23 +291,18 @@ export class SessionService {
 
     await this.assertRefreshAllowed(session, request, response, now);
 
-    const refreshToken = parsedToken.tokenId
-      ? await this.prisma.sessionRefreshToken.findUnique({
-          where: { id: parsedToken.tokenId },
-        })
-      : null;
-    const credentialHash = parsedToken.tokenId
-      ? refreshToken?.credentialHash
-      : session.refreshTokenHash;
+    const refreshToken = await this.prisma.sessionRefreshToken.findUnique({
+      where: { id: parsedToken.tokenId },
+    });
+    const refreshCredentialMatches =
+      refreshToken?.sessionId === session.id
+        ? await this.sessionTokenService.verifyRefreshCredential(
+            parsedToken.refreshCredential,
+            refreshToken.credentialHash,
+          )
+        : false;
 
-    if (
-      !credentialHash ||
-      (refreshToken && refreshToken.sessionId !== session.id) ||
-      !(await this.sessionTokenService.verifyRefreshCredential(
-        parsedToken.refreshCredential,
-        credentialHash,
-      ))
-    ) {
+    if (!refreshToken || !refreshCredentialMatches) {
       await this.sessionAuditService.recordRefreshFailed(
         session.id,
         session.userId,
@@ -317,7 +312,12 @@ export class SessionService {
       throw new UnauthorizedException();
     }
 
-    return { credentialHash, parsedToken, refreshToken, session };
+    return {
+      credentialHash: refreshToken.credentialHash,
+      parsedToken,
+      refreshToken,
+      session,
+    };
   }
 
   private async assertRefreshAllowed(
@@ -359,7 +359,7 @@ export class SessionService {
     response: Response,
     now: Date,
   ): Promise<void> {
-    const consumedAt = context.refreshToken?.consumedAt;
+    const consumedAt = context.refreshToken.consumedAt;
     if (!consumedAt) return;
 
     const reuseAge = now.getTime() - consumedAt.getTime();
@@ -427,34 +427,16 @@ export class SessionService {
       });
       if (rotated.count !== 1) throw new SessionRotationConflictError();
 
-      if (context.parsedToken.tokenId) {
-        const consumed = await transaction.sessionRefreshToken.updateMany({
-          where: {
-            id: context.parsedToken.tokenId,
-            sessionId: context.session.id,
-            credentialHash: context.credentialHash,
-            consumedAt: null,
-          },
-          data: { consumedAt: now },
-        });
-        if (consumed.count !== 1) throw new SessionRotationConflictError();
-      } else {
-        // Legacy two-part cookies only have the hash stored on Session.
-        await transaction.sessionRefreshToken.updateMany({
-          where: { sessionId: context.session.id, consumedAt: null },
-          data: { consumedAt: now },
-        });
-        await transaction.sessionRefreshToken.upsert({
-          where: { id: context.session.id },
-          create: {
-            id: context.session.id,
-            sessionId: context.session.id,
-            credentialHash: context.credentialHash,
-            consumedAt: now,
-          },
-          update: { credentialHash: context.credentialHash, consumedAt: now },
-        });
-      }
+      const consumed = await transaction.sessionRefreshToken.updateMany({
+        where: {
+          id: context.parsedToken.tokenId,
+          sessionId: context.session.id,
+          credentialHash: context.credentialHash,
+          consumedAt: null,
+        },
+        data: { consumedAt: now },
+      });
+      if (consumed.count !== 1) throw new SessionRotationConflictError();
 
       await transaction.sessionRefreshToken.create({
         data: {

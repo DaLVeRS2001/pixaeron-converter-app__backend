@@ -96,11 +96,7 @@ describe('SessionTokenService refresh tokens', () => {
     ).resolves.toBe(false);
   });
 
-  it('parses legacy and tracked refresh credentials', () => {
-    expect(service.parseRefreshToken('session.secret')).toEqual({
-      sessionId: 'session',
-      refreshCredential: 'secret',
-    });
+  it('parses a tracked refresh credential', () => {
     expect(service.parseRefreshToken('session.token.secret')).toEqual({
       sessionId: 'session',
       tokenId: 'token',
@@ -113,6 +109,7 @@ describe('SessionTokenService refresh tokens', () => {
     '',
     '.secret',
     'session.',
+    'session.secret',
     'session.token.',
     'too.many.parts.here',
   ])('rejects malformed refresh token %p', (token) => {

@@ -60,7 +60,6 @@ describe('SessionService', () => {
       create: jest.fn(),
       findUnique: jest.fn(),
       updateMany: jest.fn(),
-      upsert: jest.fn(),
     },
     user: { findUnique: jest.fn() },
   };
@@ -189,6 +188,40 @@ describe('SessionService', () => {
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
   });
 
+  it('rejects an obsolete refresh cookie and clears auth cookies', async () => {
+    const obsoleteCookieRequest = {
+      cookies: { [REFRESH_TOKEN_COOKIE]: 'session-id.obsolete-secret' },
+    } as unknown as Request;
+    tokens.parseRefreshToken.mockReturnValue(null);
+
+    await expect(
+      service.refreshSession(obsoleteCookieRequest, response),
+    ).rejects.toThrow(UnauthorizedException);
+
+    expect(tokens.parseRefreshToken).toHaveBeenCalledWith(
+      'session-id.obsolete-secret',
+    );
+    expect(prisma.session.findUnique).not.toHaveBeenCalled();
+    expect(cookies.clearAuthCookies).toHaveBeenCalledWith(response);
+  });
+
+  it('treats logout with an obsolete refresh cookie as idempotent', async () => {
+    const obsoleteCookieRequest = {
+      cookies: { [REFRESH_TOKEN_COOKIE]: 'session-id.obsolete-secret' },
+    } as unknown as Request;
+    tokens.parseRefreshToken.mockReturnValue(null);
+
+    await expect(service.logout(obsoleteCookieRequest, response)).resolves.toBe(
+      true,
+    );
+
+    expect(tokens.parseRefreshToken).toHaveBeenCalledWith(
+      'session-id.obsolete-secret',
+    );
+    expect(prisma.session.findUnique).not.toHaveBeenCalled();
+    expect(cookies.clearAuthCookies).toHaveBeenCalledWith(response);
+  });
+
   it('rotates a tracked refresh token atomically', async () => {
     prisma.session.findUnique.mockResolvedValue(activeSession);
 
@@ -234,42 +267,6 @@ describe('SessionService', () => {
       true,
     );
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
-  });
-
-  it('upgrades a legacy refresh cookie during rotation', async () => {
-    tokens.parseRefreshToken.mockReturnValue({
-      sessionId: activeSession.id,
-      refreshCredential: 'legacy-secret',
-    });
-    prisma.session.findUnique.mockResolvedValue(activeSession);
-
-    await expect(service.refreshSession(request, response)).resolves.toBe(user);
-
-    const nextCredential = nextRefreshCredential.credential;
-    expect(prisma.sessionRefreshToken.findUnique).not.toHaveBeenCalled();
-    expect(prisma.sessionRefreshToken.updateMany).toHaveBeenCalledWith({
-      where: { sessionId: activeSession.id, consumedAt: null },
-      data: { consumedAt: expect.any(Date) },
-    });
-    expect(prisma.sessionRefreshToken.upsert).toHaveBeenCalledWith({
-      where: { id: activeSession.id },
-      create: {
-        id: activeSession.id,
-        sessionId: activeSession.id,
-        credentialHash: activeSession.refreshTokenHash,
-        consumedAt: expect.any(Date),
-      },
-      update: {
-        credentialHash: activeSession.refreshTokenHash,
-        consumedAt: expect.any(Date),
-      },
-    });
-    expect(cookies.setAuthCookies).toHaveBeenCalledWith(
-      response,
-      'next-access-token',
-      `session-id.${nextCredential}`,
-      true,
-    );
   });
 
   it('does not clear winner cookies when session rotation loses CAS', async () => {

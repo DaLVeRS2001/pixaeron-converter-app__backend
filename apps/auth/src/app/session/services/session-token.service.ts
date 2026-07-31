@@ -38,7 +38,7 @@ export type IssuedRefreshCredential = {
 
 export type ParsedRefreshToken = {
   sessionId: string;
-  tokenId?: string;
+  tokenId: string;
   refreshCredential: string;
 };
 
@@ -109,19 +109,27 @@ export class SessionTokenService {
         },
       );
 
+      const hasExpectedIssuer = claims.iss === this.issuer;
+      const hasExpectedAudience = claims.aud === this.audience;
+      const subject = typeof claims.sub === 'string' ? claims.sub : '';
+      const hasValidSubject = subject.length > 0;
+      const issuedAt = typeof claims.iat === 'number' ? claims.iat : NaN;
+      const expiresAt = typeof claims.exp === 'number' ? claims.exp : NaN;
+      const hasValidTimestamps =
+        Number.isInteger(issuedAt) &&
+        Number.isInteger(expiresAt) &&
+        expiresAt > issuedAt;
+
       if (
-        claims.iss !== this.issuer ||
-        claims.aud !== this.audience ||
-        typeof claims.sub !== 'string' ||
-        claims.sub.length === 0 ||
-        !Number.isInteger(claims.iat) ||
-        !Number.isInteger(claims.exp) ||
-        (claims.exp as number) <= (claims.iat as number)
+        !hasExpectedIssuer ||
+        !hasExpectedAudience ||
+        !hasValidSubject ||
+        !hasValidTimestamps
       ) {
         return null;
       }
 
-      return { subject: claims.sub };
+      return { subject };
     } catch {
       return null;
     }
@@ -147,21 +155,15 @@ export class SessionTokenService {
 
   parseRefreshToken(refreshToken?: string): ParsedRefreshToken | null {
     const parts = refreshToken?.split('.');
-    if (!parts || !parts.every(Boolean)) return null;
+    if (parts?.length !== 3 || !parts.every(Boolean)) return null;
 
-    if (parts.length === 2) {
-      return { sessionId: parts[0], refreshCredential: parts[1] };
-    }
+    const [sessionId, tokenId, secret] = parts;
 
-    if (parts.length === 3) {
-      return {
-        sessionId: parts[0],
-        tokenId: parts[1],
-        refreshCredential: `${parts[1]}.${parts[2]}`,
-      };
-    }
-
-    return null;
+    return {
+      sessionId,
+      tokenId,
+      refreshCredential: `${tokenId}.${secret}`,
+    };
   }
 
   getRefreshExpiresAt(now: Date, rememberMe: boolean): Date {
