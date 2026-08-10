@@ -30,6 +30,7 @@ export async function init(app: INestApplication, globalPrefix = 'api') {
   );
   app.setGlobalPrefix(globalPrefix);
   app.use(cookieParser());
+  app.enableShutdownHooks();
   const port = configService.getOrThrow('PORT');
   await app.listen(port);
   Logger.log(

@@ -1,22 +1,25 @@
-import { Logger } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  SecurityEmailPurpose,
+  SendSecurityEmailResult,
+} from '@pixaeron/notifications-contract';
 import type { Request } from 'express';
 
 import { AuthEmailDeliveryService } from './auth-email-delivery.service';
 
 describe('AuthEmailDeliveryService', () => {
-  const transactionalEmailService = {
-    assertAvailable: jest.fn(),
-    sendEmailVerification: jest.fn(),
-    sendPasswordReset: jest.fn(),
-  };
+  const notificationsEmailClient = { sendSecurityEmail: jest.fn() };
   const emailActionAttemptService = { startCooldown: jest.fn() };
   const sessionAuditService = { recordSecurityEvent: jest.fn() };
+  const configValues: Record<string, string> = {
+    EMAIL_DELIVERY_ENABLED: 'true',
+    EMAIL_ACTION_RESPONSE_BUDGET_MS: '2500',
+  };
+  const configService = {
+    get: jest.fn((key: string) => configValues[key]),
+  };
   const request = {} as Request;
-  const service = new AuthEmailDeliveryService(
-    transactionalEmailService as never,
-    emailActionAttemptService as never,
-    sessionAuditService as never,
-  );
+  let service: AuthEmailDeliveryService;
 
   beforeAll(() => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
@@ -28,67 +31,143 @@ describe('AuthEmailDeliveryService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    configValues.EMAIL_DELIVERY_ENABLED = 'true';
     emailActionAttemptService.startCooldown.mockResolvedValue(undefined);
     sessionAuditService.recordSecurityEvent.mockResolvedValue(undefined);
-    transactionalEmailService.sendEmailVerification.mockResolvedValue({
-      provider: 'ses',
-      messageId: 'verification-message-id',
+    notificationsEmailClient.sendSecurityEmail.mockResolvedValue({
+      result: SendSecurityEmailResult.SEND_SECURITY_EMAIL_RESULT_ACCEPTED,
     });
-    transactionalEmailService.sendPasswordReset.mockResolvedValue({
-      provider: 'ses',
-      messageId: 'reset-message-id',
-    });
+    service = new AuthEmailDeliveryService(
+      notificationsEmailClient as never,
+      emailActionAttemptService as never,
+      sessionAuditService as never,
+      configService as never,
+    );
   });
 
-  it('delegates delivery availability without hiding failures', () => {
-    transactionalEmailService.assertAvailable.mockImplementation(() => {
-      throw new Error('disabled');
-    });
-
-    expect(() => service.assertAvailable()).toThrow('disabled');
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
-  it('records SES acceptance with the provider message ID, not as delivery', async () => {
-    await service.sendPasswordResetAfterCommit(
-      1,
-      'user@example.com',
-      'raw-reset-token',
-      request,
+  it('retains the email delivery launch gate', () => {
+    configValues.EMAIL_DELIVERY_ENABLED = 'false';
+    service = new AuthEmailDeliveryService(
+      notificationsEmailClient as never,
+      emailActionAttemptService as never,
+      sessionAuditService as never,
+      configService as never,
     );
 
+    expect(() => service.assertAvailable()).toThrow(
+      ServiceUnavailableException,
+    );
+    expect(() => service.assertAvailable()).toThrow(
+      expect.objectContaining({
+        response: expect.objectContaining({
+          code: 'EMAIL_DELIVERY_UNAVAILABLE',
+        }),
+      }),
+    );
+  });
+
+  it('submits password reset details and records only sanitized acceptance metadata', async () => {
+    await service.sendPasswordResetAfterCommit({
+      userId: 1,
+      publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
+      recipient: 'user@example.com',
+      token: 'raw-reset-token',
+      request,
+    });
+
+    const submittedRequest =
+      notificationsEmailClient.sendSecurityEmail.mock.calls[0][0];
+    expect(submittedRequest).toEqual({
+      requestId: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+      publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
+      recipient: 'user@example.com',
+      purpose: SecurityEmailPurpose.SECURITY_EMAIL_PURPOSE_PASSWORD_RESET,
+      token: 'raw-reset-token',
+      contentVersion: 1,
+    });
     expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
       'PASSWORD_RESET_ACCEPTED',
       request,
       1,
-      { provider: 'ses', providerMessageId: 'reset-message-id' },
+      {
+        requestId: submittedRequest.requestId,
+        outcome: 'ACCEPTED',
+      },
     );
   });
 
-  it('records email verification delivery failure after commit without throwing', async () => {
-    transactionalEmailService.sendEmailVerification.mockRejectedValue(
-      new Error('ses unavailable'),
+  it.each([
+    [SendSecurityEmailResult.SEND_SECURITY_EMAIL_RESULT_FAILED, 'FAILED'],
+    [SendSecurityEmailResult.SEND_SECURITY_EMAIL_RESULT_REJECTED, 'REJECTED'],
+    [
+      SendSecurityEmailResult.SEND_SECURITY_EMAIL_RESULT_SUPPRESSED,
+      'SUPPRESSED',
+    ],
+    [
+      SendSecurityEmailResult.SEND_SECURITY_EMAIL_RESULT_SUBMISSION_UNKNOWN,
+      'SUBMISSION_UNKNOWN',
+    ],
+  ])(
+    'maps non-accepted result %s to the existing failure audit',
+    async (result, outcome) => {
+      notificationsEmailClient.sendSecurityEmail.mockResolvedValue({
+        result,
+        code: 'not-audited-provider-detail',
+      });
+
+      await service.sendEmailVerificationAfterCommit(
+        {
+          userId: 2,
+          publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e08',
+          recipient: 'new@example.com',
+          token: 'verification-token',
+          request,
+        },
+        false,
+      );
+
+      const submittedRequest =
+        notificationsEmailClient.sendSecurityEmail.mock.calls[0][0];
+      expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
+        'EMAIL_VERIFICATION_FAILED',
+        request,
+        2,
+        { requestId: submittedRequest.requestId, outcome },
+      );
+    },
+  );
+
+  it('treats an RPC error as submission unknown without exposing it', async () => {
+    notificationsEmailClient.sendSecurityEmail.mockRejectedValue(
+      new Error('private gRPC failure'),
     );
 
     await expect(
-      service.sendEmailVerificationAfterCommit(
-        2,
-        'new@example.com',
-        'verification-token',
+      service.sendPasswordResetAfterCommit({
+        userId: 1,
+        publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
+        recipient: 'user@example.com',
+        token: 'raw-reset-token',
         request,
-        true,
-      ),
+      }),
     ).resolves.toBeUndefined();
 
-    expect(emailActionAttemptService.startCooldown).toHaveBeenCalledWith(
-      'resend_confirmation',
-      'new@example.com',
-      request,
-    );
+    const submittedRequest =
+      notificationsEmailClient.sendSecurityEmail.mock.calls[0][0];
     expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
-      'EMAIL_VERIFICATION_FAILED',
+      'PASSWORD_RESET_FAILED',
       request,
-      2,
-      { reason: 'delivery_failed' },
+      1,
+      {
+        requestId: submittedRequest.requestId,
+        outcome: 'SUBMISSION_UNKNOWN',
+      },
     );
   });
 
@@ -98,58 +177,82 @@ describe('AuthEmailDeliveryService', () => {
     );
 
     await service.sendEmailVerificationAfterCommit(
-      2,
-      'new@example.com',
-      'verification-token',
-      request,
+      {
+        userId: 2,
+        publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e08',
+        recipient: 'new@example.com',
+        token: 'verification-token',
+        request,
+      },
       true,
     );
 
-    expect(
-      transactionalEmailService.sendEmailVerification,
-    ).toHaveBeenCalledWith('new@example.com', 'verification-token');
+    expect(notificationsEmailClient.sendSecurityEmail).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    {
-      accepted: 'EMAIL_VERIFICATION_ACCEPTED',
-      failed: 'EMAIL_VERIFICATION_FAILED',
-      send: () =>
-        service.sendEmailVerificationAfterCommit(
-          2,
-          'new@example.com',
-          'verification-token',
-          request,
-          false,
-        ),
-    },
-    {
-      accepted: 'PASSWORD_RESET_ACCEPTED',
-      failed: 'PASSWORD_RESET_FAILED',
-      send: () =>
-        service.sendPasswordResetAfterCommit(
-          1,
-          'user@example.com',
-          'reset-token',
-          request,
-        ),
-    },
-  ])(
-    'does not turn $accepted audit failure into $failed',
-    async ({ accepted, failed, send }) => {
-      sessionAuditService.recordSecurityEvent.mockImplementation(
-        async (type) => {
-          if (type === accepted) throw new Error('audit unavailable');
-        },
-      );
+  it('does not turn an acceptance audit failure into a delivery failure', async () => {
+    sessionAuditService.recordSecurityEvent.mockRejectedValue(
+      new Error('audit unavailable'),
+    );
 
-      await expect(send()).resolves.toBeUndefined();
-      expect(sessionAuditService.recordSecurityEvent).not.toHaveBeenCalledWith(
-        failed,
-        request,
-        expect.any(Number),
-        { reason: 'delivery_failed' },
-      );
-    },
-  );
+    await expect(
+      service.sendEmailVerificationAfterCommit(
+        {
+          userId: 2,
+          publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e08',
+          recipient: 'new@example.com',
+          token: 'verification-token',
+          request,
+        },
+        false,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledTimes(1);
+    expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
+      'EMAIL_VERIFICATION_ACCEPTED',
+      request,
+      2,
+      expect.objectContaining({ outcome: 'ACCEPTED' }),
+    );
+  });
+
+  it('keeps an ordinary generic action pending until the response budget', async () => {
+    jest.useFakeTimers();
+    const action = jest.fn().mockResolvedValue(undefined);
+    let settled = false;
+
+    const completion = service.runGenericEmailAction(action).then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    await jest.advanceTimersByTimeAsync(2_499);
+    expect(settled).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(1);
+    await completion;
+    expect(settled).toBe(true);
+  });
+
+  it('keeps an outage branch pending until the same response budget', async () => {
+    jest.useFakeTimers();
+    const outage = new Error('dependency outage');
+    let settled = false;
+
+    const completion = service.runGenericEmailAction(async () => {
+      throw outage;
+    });
+    void completion.catch(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+
+    await jest.advanceTimersByTimeAsync(2_499);
+    expect(settled).toBe(false);
+
+    await jest.advanceTimersByTimeAsync(1);
+    await expect(completion).rejects.toBe(outage);
+    expect(settled).toBe(true);
+  });
 });

@@ -53,20 +53,33 @@ const corsOrigins = Joi.string()
     'cors.origin': '{{#label}} must contain only HTTP(S) origins without paths',
   });
 
-const emailAddress = Joi.string().email({ tlds: { allow: false } });
+function isValidGrpcAddress(value: string): boolean {
+  try {
+    const address = new URL('grpc://' + value);
+    const port = Number(address.port);
+    const hasHostAndPort =
+      address.hostname.length > 0 && address.port.length > 0;
+    const hasValidPort = Number.isInteger(port) && port >= 1 && port <= 65_535;
+    const hasCredentials =
+      address.username.length > 0 || address.password.length > 0;
+    const hasExtraParts =
+      address.pathname.length > 0 ||
+      address.search.length > 0 ||
+      address.hash.length > 0;
 
-const sesSender = Joi.string()
+    return hasHostAndPort && hasValidPort && !hasCredentials && !hasExtraParts;
+  } catch {
+    return false;
+  }
+}
+
+const grpcAddress = Joi.string()
   .trim()
-  .custom((value: string, helpers) => {
-    const match = /^(?:[^<>\r\n]*<([^<>\r\n]+)>|([^<>\r\n]+))$/.exec(value);
-    const address = match?.[1] ?? match?.[2];
-
-    return address && !emailAddress.validate(address.trim()).error
-      ? value
-      : helpers.error('string.email');
-  }, 'SES sender')
+  .custom((value: string, helpers) =>
+    isValidGrpcAddress(value) ? value : helpers.error('grpc.address'),
+  )
   .messages({
-    'string.email': '{{#label}} must contain a valid email address',
+    'grpc.address': '{{#label}} must be a valid gRPC host:port address',
   });
 
 export const authEnvironmentSchema = Joi.object({
@@ -125,27 +138,21 @@ export const authEnvironmentSchema = Joi.object({
   }),
 
   EMAIL_DELIVERY_ENABLED: booleanValue,
-  AWS_REGION: Joi.when('EMAIL_DELIVERY_ENABLED', {
+  NOTIFICATIONS_GRPC_URL: Joi.when('EMAIL_DELIVERY_ENABLED', {
     is: 'true',
-    then: Joi.string()
-      .trim()
-      .pattern(/^[a-z]{2}(?:-[a-z0-9]+)+-\d+$/)
-      .required()
-      .messages({
-        'string.pattern.base': '{{#label}} must be a valid AWS region',
-      }),
+    then: grpcAddress.required(),
+    otherwise: grpcAddress.optional(),
+  }),
+  NOTIFICATIONS_GRPC_DEADLINE_MS: Joi.when('EMAIL_DELIVERY_ENABLED', {
+    is: 'true',
+    then: integer(100, 30_000),
     otherwise: Joi.any().optional(),
   }),
-  SES_FROM_EMAIL: Joi.when('EMAIL_DELIVERY_ENABLED', {
+  EMAIL_ACTION_RESPONSE_BUDGET_MS: Joi.when('EMAIL_DELIVERY_ENABLED', {
     is: 'true',
-    then: sesSender.required(),
-    otherwise: Joi.any().optional(),
-  }),
-  FRONTEND_URL: Joi.when('EMAIL_DELIVERY_ENABLED', {
-    is: 'true',
-    then: Joi.string()
-      .uri({ scheme: ['http', 'https'] })
-      .required(),
+    then: integer(101, 60_000).greater(
+      Joi.ref('NOTIFICATIONS_GRPC_DEADLINE_MS'),
+    ),
     otherwise: Joi.any().optional(),
   }),
 });

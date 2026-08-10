@@ -1,5 +1,22 @@
 [
   {
+    "project": "notifications",
+    "deploymentOrder": 5,
+    "imageName": "ghcr.io/dalvers2001/pixaeron-notifications",
+    "dockerfile": "apps/notifications/Dockerfile",
+    "composeService": "notifications",
+    "imageTagEnv": "NOTIFICATIONS_IMAGE_TAG",
+    "ssmPath": "/pixaeron/production/notifications",
+    "secureParameters": [
+      "DATABASE_URL",
+      "RECIPIENT_HMAC_KEYRING_JSON",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY"
+    ],
+    "runtimeEnvFileEnv": "NOTIFICATIONS_RUNTIME_ENV_FILE",
+    "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/notifications/prisma.config.ts"
+  },
+  {
     "project": "auth",
     "deploymentOrder": 10,
     "imageName": "ghcr.io/dalvers2001/pixaeron-auth",

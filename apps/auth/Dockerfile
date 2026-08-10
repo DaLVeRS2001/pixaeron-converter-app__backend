@@ -7,7 +7,7 @@ WORKDIR /workspace
 ENV HUSKY=0
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && apt-get install -y --no-install-recommends ca-certificates git openssl \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json nx.json tsconfig.base.json ./
@@ -20,7 +20,8 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY apps/auth ./apps/auth
 
-RUN npx nx run auth:prune
+RUN find libs/notifications-contract/src/generated -type f -exec chmod 0644 {} + \
+  && npx nx run auth:prune
 
 FROM node:24-bookworm-slim AS runner
 

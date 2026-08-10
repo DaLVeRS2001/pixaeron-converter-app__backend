@@ -1,13 +1,18 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CaptchaModule } from '@pixaeron/captcha';
+import { join } from 'node:path';
 
 import { PrismaModule } from '../prisma/prisma.module';
 import { SessionModule } from '../session/session.module';
 import { UserModule } from '../user/user.module';
 import { AuthEmailDeliveryService } from './email/auth-email-delivery.service';
 import { EmailActionAttemptService } from './email/email-action-attempt.service';
-import { TransactionalEmailService } from './email/transactional-email.service';
+import {
+  NOTIFICATIONS_GRPC_CLIENT,
+  NotificationsEmailClient,
+} from './email/notifications-email.client';
 import { GoogleSignInService } from './google/google-sign-in.service';
 import { GoogleTokenService } from './google/google-token.service';
 import { AuthResolver } from './auth.resolver';
@@ -20,10 +25,33 @@ import { RegistrationService } from './registration/registration.service';
 
 export const AUTH_RESOLVERS = [AuthResolver];
 
+const notificationsProtoPath = join(
+  __dirname,
+  'proto/pixaeron/notifications/v1/notifications.proto',
+);
+
 @Module({
   imports: [
     CaptchaModule,
     ConfigModule,
+    ClientsModule.registerAsync([
+      {
+        name: NOTIFICATIONS_GRPC_CLIENT,
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.GRPC,
+          options: {
+            package: 'pixaeron.notifications.v1',
+            protoPath: notificationsProtoPath,
+            url: configService.get<string>('NOTIFICATIONS_GRPC_URL'),
+            channelOptions: {
+              'grpc.enable_retries': 0,
+            },
+          },
+        }),
+      },
+    ]),
     PrismaModule,
     SessionModule,
     UserModule,
@@ -38,7 +66,7 @@ export const AUTH_RESOLVERS = [AuthResolver];
     AuthChallengePolicyService,
     AuthTokenService,
     AuthEmailDeliveryService,
-    TransactionalEmailService,
+    NotificationsEmailClient,
     LoginAttemptService,
     EmailActionAttemptService,
   ],

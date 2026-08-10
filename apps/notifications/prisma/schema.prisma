@@ -1,0 +1,168 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EmailPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  ACCEPTED
+  DELIVERED
+  DELAYED
+  BOUNCED
+  COMPLAINED
+  REJECTED
+  FAILED
+  SUBMISSION_UNKNOWN
+  SUPPRESSED
+}
+
+enum EmailCommandResult {
+  ACCEPTED
+  FAILED
+  REJECTED
+  SUPPRESSED
+  SUBMISSION_UNKNOWN
+}
+
+enum EmailDeliveryEventType {
+  SEND
+  DELIVERY
+  DELIVERY_DELAY
+  BOUNCE
+  COMPLAINT
+  REJECT
+  RENDERING_FAILURE
+}
+
+enum EmailDestinationStatus {
+  ACTIVE
+  TEMPORARY_FAILURE
+  SUPPRESSED
+  RECOVERY_PENDING
+}
+
+enum EmailRecoveryAction {
+  REQUESTED
+  COMPLETED
+  FAILED
+}
+
+model EmailDelivery {
+  id                      String               @id @default(uuid()) @db.Uuid
+  requestId               String               @unique @map("request_id") @db.Uuid
+  publicSubject           String               @map("public_subject") @db.Uuid
+  recipientHash           String               @map("recipient_hash") @db.VarChar(64)
+  recipientHashKeyVersion Int                  @map("recipient_hash_key_version")
+  purpose                 EmailPurpose
+  contentVersion          Int                  @map("content_version")
+  tokenFingerprint        String               @map("token_fingerprint") @db.VarChar(64)
+  status                  EmailDeliveryStatus  @default(PENDING)
+  callerResult            EmailCommandResult?  @map("caller_result")
+  callerResultCode        String?              @map("caller_result_code") @db.VarChar(100)
+  providerMessageId       String?              @unique @map("provider_message_id") @db.VarChar(255)
+  attemptCount            Int                  @default(0) @map("attempt_count")
+  leaseExpiresAt          DateTime?            @map("lease_expires_at") @db.Timestamptz(3)
+  failureCode             String?              @map("failure_code") @db.VarChar(100)
+  submittedAt             DateTime?            @map("submitted_at") @db.Timestamptz(3)
+  finalizedAt             DateTime?            @map("finalized_at") @db.Timestamptz(3)
+  lastEventAt             DateTime?            @map("last_event_at") @db.Timestamptz(3)
+  lastEventRank           Int?                 @map("last_event_rank")
+  lastEventFingerprint    String?              @map("last_event_fingerprint") @db.VarChar(64)
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  events                  EmailDeliveryEvent[]
+
+  @@index([status, leaseExpiresAt])
+  @@index([status, createdAt])
+  @@index([status, lastEventAt])
+  @@index([recipientHashKeyVersion])
+  @@index([recipientHash, recipientHashKeyVersion, createdAt])
+  @@index([publicSubject, purpose, createdAt])
+  @@index([createdAt])
+  @@map("email_deliveries")
+}
+
+// Provider events are append-only. The migration rejects UPDATE statements.
+model EmailDeliveryEvent {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  deliveryId          String                 @map("delivery_id") @db.Uuid
+  type                EmailDeliveryEventType @map("event_type")
+  snsMessageId        String?                @unique @map("sns_message_id") @db.VarChar(255)
+  providerFeedbackId  String?                @map("provider_feedback_id") @db.VarChar(255)
+  subtype             String?                @db.VarChar(100)
+  providerMessageId   String                 @map("provider_message_id") @db.VarChar(255)
+  semanticFingerprint String                 @unique @map("semantic_fingerprint") @db.VarChar(64)
+  occurredAt          DateTime               @map("occurred_at") @db.Timestamptz(3)
+  receivedAt          DateTime               @default(now()) @map("received_at") @db.Timestamptz(3)
+  // Sanitized provider metadata only; never store recipient addresses or raw payloads.
+  details             Json?
+  delivery            EmailDelivery          @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+
+  @@index([deliveryId, occurredAt])
+  @@index([providerMessageId, occurredAt])
+  @@index([providerFeedbackId])
+  @@index([type, occurredAt])
+  @@index([receivedAt])
+  @@map("email_delivery_events")
+}
+
+model EmailDestination {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  recipientHash           String                 @map("recipient_hash") @db.VarChar(64)
+  recipientHashKeyVersion Int                    @map("recipient_hash_key_version")
+  status                  EmailDestinationStatus @default(ACTIVE)
+  reasonCode              String?                @map("reason_code") @db.VarChar(100)
+  suppressedAt            DateTime?              @map("suppressed_at") @db.Timestamptz(3)
+  lastDeliveryId          String?                @map("last_delivery_id") @db.Uuid
+  lastEventId             String?                @map("last_event_id") @db.Uuid
+  lastEventAt             DateTime?              @map("last_event_at") @db.Timestamptz(3)
+  lastEventRank           Int?                   @map("last_event_rank")
+  lastEventFingerprint    String?                @map("last_event_fingerprint") @db.VarChar(64)
+  suppressionRevision     Int                    @default(0) @map("suppression_revision")
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  recoveryAudits          EmailRecoveryAudit[]
+
+  @@unique([recipientHash, recipientHashKeyVersion])
+  @@index([recipientHashKeyVersion])
+  @@index([status, updatedAt])
+  @@index([status, lastEventAt])
+  @@index([lastDeliveryId])
+  @@index([lastEventId])
+  @@map("email_destinations")
+}
+
+// Recovery audits are append-only. The migration rejects UPDATE statements.
+model EmailRecoveryAudit {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  destinationId       String                 @map("destination_id") @db.Uuid
+  operationId         String                 @map("operation_id") @db.Uuid
+  action              EmailRecoveryAction
+  actorId             String                 @map("actor_id") @db.VarChar(128)
+  reasonCode          String                 @map("reason_code") @db.VarChar(100)
+  evidenceReference   String                 @map("evidence_reference") @db.VarChar(255)
+  previousStatus      EmailDestinationStatus @map("previous_status")
+  nextStatus          EmailDestinationStatus @map("next_status")
+  providerRequestId   String?                @map("provider_request_id") @db.VarChar(255)
+  failureCode         String?                @map("failure_code") @db.VarChar(100)
+  suppressionRevision Int                    @map("suppression_revision")
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  destination         EmailDestination       @relation(fields: [destinationId], references: [id], onDelete: Restrict)
+
+  @@unique([operationId, destinationId])
+  @@index([destinationId, createdAt])
+  @@index([operationId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("email_recovery_audits")
+}

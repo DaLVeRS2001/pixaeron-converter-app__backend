@@ -15,6 +15,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - default
+
+  notifications-postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notifications
+      POSTGRES_PASSWORD: notifications
+      POSTGRES_DB: pixaeron_notifications
+    ports:
+      - '127.0.0.1:5434:5432'
+    volumes:
+      - notifications_postgres18_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U notifications -d pixaeron_notifications']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notifications_data
 
   auth:
     build:
@@ -27,6 +49,9 @@ services:
       NODE_ENV: development
       PORT: 3000
       REDIS_URL: redis://redis:6379
+      NOTIFICATIONS_GRPC_URL: notifications-command:50052
+      NOTIFICATIONS_GRPC_DEADLINE_MS: 2000
+      EMAIL_ACTION_RESPONSE_BUDGET_MS: 2500
     command: >-
       sh -c "./node_modules/.bin/prisma migrate deploy
       --config apps/auth/prisma.config.ts && node main.js"
@@ -50,6 +75,48 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    networks:
+      - default
+      - notifications_command
+
+  notifications:
+    build:
+      context: .
+      dockerfile: apps/notifications/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - apps/notifications/.env
+    environment:
+      NODE_ENV: development
+      PORT: 3004
+      DATABASE_URL: postgresql://notifications:notifications@notifications-postgres:5432/pixaeron_notifications?schema=public
+      NOTIFICATIONS_GRPC_HOST: notifications-command
+      NOTIFICATIONS_GRPC_PORT: 50052
+    command: >-
+      sh -c "./node_modules/.bin/prisma migrate deploy
+      --config apps/notifications/prisma.config.ts && node main.js"
+    depends_on:
+      notifications-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3004/notifications/health/ready').then((response) => {
+            if (!response.ok) process.exit(1);
+          }).catch(() => process.exit(1));
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      notifications_command:
+        aliases:
+          - notifications-command
+      notifications_data:
+      notifications_egress:
 
   gateway:
     build:
@@ -77,6 +144,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    networks:
+      - default
 
   redis:
     image: redis:8-alpine
@@ -96,7 +165,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - default
+
+networks:
+  notifications_command:
+    internal: true
+  notifications_data:
+  notifications_egress:
 
 volumes:
+  notifications_postgres18_data:
   postgres18_data:
   redis_data:

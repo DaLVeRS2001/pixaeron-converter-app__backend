@@ -9,6 +9,9 @@
     "docker:stop": "docker compose down",
     "schema:export": "nx run-many -t schema-export",
     "schema:check": "nx run-many -t schema-check",
+    "contracts:generate": "nx run notifications-contract:contracts-generate",
+    "contracts:check": "nx run notifications-contract:contracts-check",
+    "contracts:breaking": "nx run notifications-contract:contracts-breaking",
     "check": "nx run-many --targets=lint,test,build"
   },
   "private": true,
@@ -17,6 +20,7 @@
     "libs/*"
   ],
   "devDependencies": {
+    "@bufbuild/buf": "1.72.0",
     "@eslint/js": "^9.8.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
@@ -44,6 +48,7 @@
     "prettier": "~3.6.2",
     "ts-jest": "^29.4.0",
     "ts-node": "10.9.1",
+    "ts-proto": "2.12.0",
     "tsconfig-paths": "^4.2.0",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
@@ -54,7 +59,7 @@
     "webpack-merge": "^6.0.1"
   },
   "overrides": {
-    "fast-uri": "3.1.4",
+    "fast-uri": "3.1.5",
     "valibot": "1.4.2",
     "@nestjs/graphql": {
       "ws": "8.21.1",
