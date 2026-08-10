@@ -5,3 +5,4 @@
 /.nx/workspace-data
 .github/CODEOWNERS
 /apps/*/schema.graphql
+/libs/notifications-contract/src/generated

@@ -2,9 +2,9 @@
 // source: pixaeron/notifications/v1/notifications.proto
 
 /* eslint-disable */
-import type { Metadata } from '@grpc/grpc-js';
-import { GrpcMethod, GrpcStreamMethod } from '@nestjs/microservices';
-import { Observable } from 'rxjs';
+import type { Metadata } from "@grpc/grpc-js";
+import { GrpcMethod, GrpcStreamMethod } from "@nestjs/microservices";
+import { Observable } from "rxjs";
 
 export enum SecurityEmailPurpose {
   SECURITY_EMAIL_PURPOSE_UNSPECIFIED = 0,
@@ -50,39 +50,22 @@ export interface NotificationsEmailServiceController {
     request: SendSecurityEmailRequest,
     metadata: Metadata,
     ...rest: any
-  ):
-    | Promise<SendSecurityEmailResponse>
-    | Observable<SendSecurityEmailResponse>
-    | SendSecurityEmailResponse;
+  ): Promise<SendSecurityEmailResponse> | Observable<SendSecurityEmailResponse> | SendSecurityEmailResponse;
 }
 
 export function NotificationsEmailServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = ['sendSecurityEmail'];
+    const grpcMethods: string[] = ["sendSecurityEmail"];
     for (const method of grpcMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(
-        constructor.prototype,
-        method,
-      );
-      GrpcMethod('NotificationsEmailService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
+      GrpcMethod("NotificationsEmailService", method)(constructor.prototype[method], method, descriptor);
     }
     const grpcStreamMethods: string[] = [];
     for (const method of grpcStreamMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(
-        constructor.prototype,
-        method,
-      );
-      GrpcStreamMethod('NotificationsEmailService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
+      GrpcStreamMethod("NotificationsEmailService", method)(constructor.prototype[method], method, descriptor);
     }
   };
 }
 
-export const NOTIFICATIONS_EMAIL_SERVICE_NAME = 'NotificationsEmailService';
+export const NOTIFICATIONS_EMAIL_SERVICE_NAME = "NotificationsEmailService";
