@@ -177,7 +177,7 @@ describe('authEnvironmentSchema', () => {
     expect(valid.error).toBeUndefined();
   });
 
-  it('requires and validates SES settings only when email delivery is enabled', () => {
+  it('requires valid Notifications gRPC settings when email delivery is enabled', () => {
     const missing = validate({
       ...validEnvironment,
       EMAIL_DELIVERY_ENABLED: 'true',
@@ -185,25 +185,49 @@ describe('authEnvironmentSchema', () => {
     const valid = validate({
       ...validEnvironment,
       EMAIL_DELIVERY_ENABLED: 'true',
-      AWS_REGION: 'eu-central-1',
-      SES_FROM_EMAIL: 'Pixaeron <no-reply@pixaeron.com>',
-      FRONTEND_URL: 'https://pixaeron.com',
+      NOTIFICATIONS_GRPC_URL: 'notifications:50052',
+      NOTIFICATIONS_GRPC_DEADLINE_MS: '2000',
+      EMAIL_ACTION_RESPONSE_BUDGET_MS: '2500',
     });
     const invalid = validate({
       ...validEnvironment,
       EMAIL_DELIVERY_ENABLED: 'true',
-      AWS_REGION: 'not-a-region',
-      SES_FROM_EMAIL: 'Pixaeron <invalid>',
-      FRONTEND_URL: 'ftp://pixaeron.com',
+      NOTIFICATIONS_GRPC_URL: 'https://notifications:50052/path',
+      NOTIFICATIONS_GRPC_DEADLINE_MS: '99',
+      EMAIL_ACTION_RESPONSE_BUDGET_MS: '99',
     });
     const invalidKeys = invalid.error?.details.map((detail) => detail.path[0]);
 
     expect(missing.error?.details.map((detail) => detail.path[0])).toEqual(
-      expect.arrayContaining(['AWS_REGION', 'SES_FROM_EMAIL', 'FRONTEND_URL']),
+      expect.arrayContaining([
+        'NOTIFICATIONS_GRPC_URL',
+        'NOTIFICATIONS_GRPC_DEADLINE_MS',
+        'EMAIL_ACTION_RESPONSE_BUDGET_MS',
+      ]),
     );
     expect(valid.error).toBeUndefined();
     expect(invalidKeys).toEqual(
-      expect.arrayContaining(['AWS_REGION', 'SES_FROM_EMAIL', 'FRONTEND_URL']),
+      expect.arrayContaining([
+        'NOTIFICATIONS_GRPC_URL',
+        'NOTIFICATIONS_GRPC_DEADLINE_MS',
+        'EMAIL_ACTION_RESPONSE_BUDGET_MS',
+      ]),
     );
+  });
+
+  it('requires the public email-action budget to exceed the gRPC deadline', () => {
+    const { error } = validate({
+      ...validEnvironment,
+      EMAIL_DELIVERY_ENABLED: 'true',
+      NOTIFICATIONS_GRPC_URL: '[::1]:50052',
+      NOTIFICATIONS_GRPC_DEADLINE_MS: '2000',
+      EMAIL_ACTION_RESPONSE_BUDGET_MS: '2000',
+    });
+
+    expect(
+      error?.details.some(
+        (detail) => detail.path[0] === 'EMAIL_ACTION_RESPONSE_BUDGET_MS',
+      ),
+    ).toBe(true);
   });
 });

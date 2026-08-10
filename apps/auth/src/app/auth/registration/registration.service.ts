@@ -119,10 +119,13 @@ export class RegistrationService {
       });
 
     await this.emailDelivery.sendEmailVerificationAfterCommit(
-      registration.user.id,
-      registration.user.email,
-      registration.verificationToken,
-      request,
+      {
+        userId: registration.user.id,
+        publicSubject: registration.user.publicId,
+        recipient: registration.user.email,
+        token: registration.verificationToken,
+        request,
+      },
       true,
     );
 
@@ -134,54 +137,62 @@ export class RegistrationService {
     request: Request,
   ): Promise<AuthRequestResult> {
     this.emailDelivery.assertAvailable();
-    const normalizedEmail = normalizeEmail(email);
-    await this.challengePolicy.prepareEmailAction(
-      'resend_confirmation',
-      normalizedEmail,
-      captchaToken,
-      request,
-    );
 
-    const user = await this.userService.getUser({ email: normalizedEmail });
-
-    if (user?.emailVerified) {
-      await this.sessionAuditService.recordSecurityEvent(
-        SessionEventType.EMAIL_ALREADY_VERIFIED,
+    await this.emailDelivery.runGenericEmailAction(async () => {
+      const normalizedEmail = normalizeEmail(email);
+      await this.challengePolicy.prepareEmailAction(
+        'resend_confirmation',
+        normalizedEmail,
+        captchaToken,
         request,
-        user.id,
       );
-    } else if (user) {
-      const verificationToken = await this.prisma.$transaction(
-        async (transaction) => {
-          const issued = await this.authTokenService.issueInTransaction(
-            transaction,
-            user.id,
-            AuthTokenType.EMAIL_VERIFICATION,
-          );
-          await this.sessionAuditService.recordSecurityEvent(
-            SessionEventType.EMAIL_VERIFICATION_REQUESTED,
+
+      const user = await this.userService.getUser({
+        email: normalizedEmail,
+      });
+
+      if (user?.emailVerified) {
+        await this.sessionAuditService.recordSecurityEvent(
+          SessionEventType.EMAIL_ALREADY_VERIFIED,
+          request,
+          user.id,
+        );
+      } else if (user) {
+        const verificationToken = await this.prisma.$transaction(
+          async (transaction) => {
+            const issued = await this.authTokenService.issueInTransaction(
+              transaction,
+              user.id,
+              AuthTokenType.EMAIL_VERIFICATION,
+            );
+            await this.sessionAuditService.recordSecurityEvent(
+              SessionEventType.EMAIL_VERIFICATION_REQUESTED,
+              request,
+              user.id,
+              undefined,
+              transaction,
+            );
+            return issued;
+          },
+        );
+
+        await this.emailDelivery.sendEmailVerificationAfterCommit(
+          {
+            userId: user.id,
+            publicSubject: user.publicId,
+            recipient: user.email,
+            token: verificationToken,
             request,
-            user.id,
-            undefined,
-            transaction,
-          );
-          return issued;
-        },
-      );
-
-      await this.emailDelivery.sendEmailVerificationAfterCommit(
-        user.id,
-        user.email,
-        verificationToken,
-        request,
-        false,
-      );
-    } else {
-      await this.sessionAuditService.recordSecurityEvent(
-        SessionEventType.EMAIL_VERIFICATION_REQUESTED,
-        request,
-      );
-    }
+          },
+          false,
+        );
+      } else {
+        await this.sessionAuditService.recordSecurityEvent(
+          SessionEventType.EMAIL_VERIFICATION_REQUESTED,
+          request,
+        );
+      }
+    });
 
     return { accepted: true };
   }

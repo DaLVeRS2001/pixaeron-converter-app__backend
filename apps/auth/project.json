@@ -13,7 +13,15 @@
         "env": {
           "NODE_ENV": "production"
         },
-        "cwd": "apps/auth"
+        "cwd": "apps/auth",
+        "assets": [
+          "apps/auth/src/assets",
+          {
+            "input": "libs/notifications-contract/proto",
+            "glob": "**/*.proto",
+            "output": "proto"
+          }
+        ]
       },
       "configurations": {
         "development": {

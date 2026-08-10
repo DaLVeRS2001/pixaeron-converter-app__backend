@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app/app.module';
 import { configureHttp, init } from '@pixaeron/nestjs';
@@ -19,4 +20,8 @@ async function bootstrap() {
   await init(app, globalPrefix);
 }
 
-bootstrap();
+bootstrap().catch((error: unknown) => {
+  const reason = error instanceof Error ? error.message : 'Unknown error';
+  Logger.error(`Auth process failed during startup: ${reason}`);
+  process.exit(1);
+});

@@ -1,0 +1,132 @@
+{
+  "name": "notifications",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/notifications/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "dependsOn": ["prisma-generate", "^build"],
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "webpack-cli build",
+        "env": {
+          "NODE_ENV": "production"
+        },
+        "cwd": "apps/notifications",
+        "assets": [
+          "apps/notifications/src/assets",
+          {
+            "input": "libs/notifications-contract/proto",
+            "glob": "**/*.proto",
+            "output": "proto"
+          }
+        ]
+      },
+      "configurations": {
+        "development": {
+          "env": {
+            "NODE_ENV": "development"
+          }
+        }
+      }
+    },
+    "prune-lockfile": {
+      "dependsOn": ["build"],
+      "cache": true,
+      "executor": "@nx/js:prune-lockfile",
+      "outputs": [
+        "{workspaceRoot}/dist/apps/notifications/package.json",
+        "{workspaceRoot}/dist/apps/notifications/package-lock.json"
+      ],
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "copy-workspace-modules": {
+      "dependsOn": ["build"],
+      "cache": true,
+      "outputs": ["{workspaceRoot}/dist/apps/notifications/workspace_modules"],
+      "executor": "@nx/js:copy-workspace-modules",
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "prune": {
+      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
+      "executor": "nx:noop"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "dependsOn": ["build"],
+      "options": {
+        "buildTarget": "notifications:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "notifications:build:development"
+        },
+        "production": {
+          "buildTarget": "notifications:build:production"
+        }
+      }
+    },
+    "test": {
+      "dependsOn": ["prisma-generate"],
+      "options": {
+        "passWithNoTests": true
+      }
+    },
+    "prisma-generate": {
+      "command": "prisma generate",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/prisma/schema.prisma",
+        "{projectRoot}/prisma.config.ts",
+        "{workspaceRoot}/package-lock.json"
+      ],
+      "outputs": ["{projectRoot}/src/generated/prisma"]
+    },
+    "prisma-migrate-dev": {
+      "command": "prisma migrate dev",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-migrate-deploy": {
+      "command": "prisma migrate deploy",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-validate": {
+      "command": "prisma validate",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-studio": {
+      "command": "prisma studio",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "db-integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "prisma migrate deploy --config apps/notifications/prisma.config.ts",
+          "prisma db execute --config apps/notifications/prisma.config.ts --file apps/notifications/scripts/postgres-integration.sql"
+        ],
+        "parallel": false,
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

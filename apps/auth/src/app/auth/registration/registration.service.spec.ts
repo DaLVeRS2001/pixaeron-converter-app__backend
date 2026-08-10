@@ -22,11 +22,13 @@ describe('RegistrationService', () => {
   };
   const emailDelivery = {
     assertAvailable: jest.fn(),
+    runGenericEmailAction: jest.fn(),
     sendEmailVerificationAfterCommit: jest.fn(),
   };
   const request = {} as Request;
   const authenticatedUser = {
     id: 1,
+    publicId: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
     email: 'user@example.com',
     username: 'user',
     emailVerified: true,
@@ -41,6 +43,9 @@ describe('RegistrationService', () => {
     authTokenService.issueInTransaction.mockResolvedValue('issued-token');
     challengePolicy.requireCaptcha.mockResolvedValue(undefined);
     challengePolicy.prepareEmailAction.mockResolvedValue(undefined);
+    emailDelivery.runGenericEmailAction.mockImplementation((action) =>
+      action(),
+    );
     emailDelivery.sendEmailVerificationAfterCommit.mockResolvedValue(undefined);
     sessionAuditService.recordSecurityEvent.mockResolvedValue(undefined);
 
@@ -58,6 +63,7 @@ describe('RegistrationService', () => {
     const transaction = {};
     const createdUser = {
       id: 2,
+      publicId: '0198f687-15d8-7f5e-bd79-62f8f4d51e08',
       email: 'new@example.com',
       username: 'new-user',
       emailVerified: false,
@@ -111,10 +117,13 @@ describe('RegistrationService', () => {
       transaction,
     );
     expect(emailDelivery.sendEmailVerificationAfterCommit).toHaveBeenCalledWith(
-      2,
-      'new@example.com',
-      'verification-token',
-      request,
+      {
+        userId: 2,
+        publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e08',
+        recipient: 'new@example.com',
+        token: 'verification-token',
+        request,
+      },
       true,
     );
   });
@@ -292,6 +301,9 @@ describe('RegistrationService', () => {
       request,
     );
     expect(authTokenService.issueInTransaction).not.toHaveBeenCalled();
+    expect(emailDelivery.runGenericEmailAction).toHaveBeenCalledWith(
+      expect.any(Function),
+    );
   });
 
   it('does not issue another token for an already verified email', async () => {

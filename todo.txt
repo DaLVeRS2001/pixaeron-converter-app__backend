@@ -1,34 +1,15 @@
 # Planned work
 
-1. Complete and verify the production email setup.
-   - Use Google Workspace for real `@pixaeron.com` mailboxes (recommended), or
-     Cloudflare Email Routing for forwarding; they must not both own the root MX.
-   - Finish SES production access, runtime authorization, custom MAIL FROM,
-     bounce/complaint notifications, and end-to-end delivery tests for the
-     implemented `no-reply@pixaeron.com -> user` adapter.
-2. Implement SES deliverability audit and automated feedback processing.
-   - Connect the existing SNS feedback topic to a durable SQS consumer or
-     equivalent worker; do not process delivery state only through email.
-   - Add a transactional outbox so account/token/session state and required audit
-     events cannot diverge; dispatch email asynchronously and idempotently to reduce
-     known-versus-unknown account timing differences.
-   - Handle and deduplicate hard-bounce and complaint events by SES message ID.
-   - Associate events with the user and outbound message without storing email
-     bodies, raw security tokens, or unnecessary recipient PII in audit metadata.
-   - Track accepted, bounced, complained, and suppressed delivery state for the
-     future admin/audit UI.
-   - Keep account lifecycle, email verification, and destination delivery state
-     independent; a complaint stops email but does not disable the account.
-   - Stop application retries for bounced/complained recipients and require an
-     explicit reviewed administrative flow before removing SES suppression.
-   - Add pending-account expiry, a signed `This wasn't me` cancellation flow,
-     and verified recovery for legitimate owners of suppressed addresses.
-   - Add retention, access-control, metrics, alerting, replay, and failure-path
-     tests before calling the audit production-ready.
-3. Run throughput and multi-replica tests for shared rate limits, refresh
+1. Production email setup / SES rollout.
+   - The Notifications service, its gRPC contract and the SES feedback consumer
+     are implemented in the repository. The remaining work is owner-operated AWS
+     provisioning and staged enablement.
+   - The full manual checklist lives in `docs/todo.md`; do not duplicate it here.
+
+2. Run throughput and multi-replica tests for shared rate limits, refresh
    concurrency, cleanup locks, and Redis failure behavior.
 
-4. Complete the Google Sign-In production release gates.
+3. Complete the Google Sign-In production release gates.
    - Publish the production Google Auth Platform audience only after the
      homepage, `/privacy`, and `/terms` are public over HTTPS.
    - Obtain owner/legal/privacy approval for the public policy text and confirm
@@ -40,18 +21,63 @@
    - Run fresh-browser negative-path tests for blocked/failed Google SDK load,
      wrong audience, expired token, account-link-required, CAPTCHA retry, and
      a non-test Google account.
-5. Publish the frontend CI and complete the first Cloudflare deployment.
-   - Push central CI commit `85e3285023f9e3d5ec6965269380f56ee94b320b`
-     before the frontend caller that pins it.
+
+4. Publish the frontend CI and complete the first Cloudflare deployment.
+   - Push the central CI commit before the frontend caller that pins it, then
+     replace the frontend pin with that exact SHA.
    - Keep public frontend build values as repository variables. Store the
      Cloudflare account ID as a `production` environment variable and the
      deployment token only as a protected `production` environment secret.
      The repository-local deploy job consumes the central verified-build artifact.
    - Deploy `pixaeron-web`, test its Workers preview URL, bind the production
      domain, and verify SPA refresh, Google, Turnstile, cookies, and CORS.
-6. Local migration deploy and token/concurrency tests are complete. Before production,
-   take a backup, review all three auth migrations, deploy them before the new image,
-   and verify the database constraint/index state after rollout.
+
+5. Database migrations before production.
+   - Local migration deploy and token/concurrency tests are complete. Before
+     production, take a backup, review the pending Auth migrations, deploy them
+     before the new image, and verify the constraint/index state after rollout.
+   - Notifications owns a separate database and its own migration command; it is
+     never mixed with the Auth schema.
+
+6. Move Auth off the RDS master user onto a dedicated least-privilege role.
+   - Current state: the production database `dbauth` is owned by `dbmasteruser`,
+     and Auth appears to connect as that master user. Confirm by reading the
+     user part of `/pixaeron/production/auth/DATABASE_URL`.
+   - The master user can read and drop every database on the instance, including
+     the Notifications database, and can create or drop roles. A compromise of
+     Auth therefore compromises the whole instance.
+   - Target: an `pixaeron_auth` login role owning only `dbauth`, mirroring what
+     Notifications does from the start. Keep the master password for operator
+     administration only.
+   - Migration is not zero-downtime-free: create the role, transfer ownership of
+     the schema and all objects in `dbauth`, update `DATABASE_URL` in Parameter
+     Store, then redeploy Auth. Take a snapshot first and rehearse on a restored
+     copy before touching production.
+   - Generate the new password from letters and digits only so it needs no
+     percent-encoding inside `DATABASE_URL`. If a password does contain special
+     characters, encode it with `[uri]::EscapeDataString('<password>')` exactly
+     once; double-encoding turns `%7B` into `%257B` and breaks authentication.
+
+7. Deferred code work (tracked from the code review; none is a launch blocker).
+   - Nonterminal HMAC-alias convergence in the SES feedback state machine.
+     Dormant while `SES_FEEDBACK_CONSUMER_ENABLED=false`; fix before relying on
+     alias state after an HMAC key rotation.
+   - Central CI rollback restores the compose file from the wrong baseline for
+     the second and later services of an ordered release. Fix requires a
+     staging VPS to verify.
+   - Add authentication (mTLS or a shared secret in gRPC metadata) to the
+     private Auth -> Notifications channel before a second consumer joins the
+     command network.
+   - Remaining duplication: sender regex, CAS lease-expiry, cross-service Joi
+     primitives, central CI setup blocks, `docs/deploy_examples` forks.
+   - Auth `User` model has no `@@map`, so its table is `"User"` while every other
+     model maps to snake_case plural (`accounts`, `sessions`, `auth_tokens`,
+     `session_events`, `session_refresh_tokens`). Cosmetic only — Prisma quotes
+     the identifier correctly — but hand-written SQL must use `FROM "User"`,
+     because PostgreSQL folds unquoted identifiers to lower case. Fixing it means
+     `@@map("users")` plus a migration that renames the table on the production
+     database, so schedule it on its own with a snapshot; do not bundle it with
+     the Notifications rollout.
 
 # Candidate topology (planned, not implemented)
 
@@ -61,3 +87,9 @@ Future EC2 Auto Scaling Group
 |- desired: 0
 `- max: 5
 ```
+
+Add 2FA
+
+
+remove /pixaeron/production/auth/AWS_REGION
+remove /pixaeron/production/auth/SES_FROM_EMAIL

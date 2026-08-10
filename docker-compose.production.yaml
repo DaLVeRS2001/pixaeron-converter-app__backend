@@ -22,9 +22,48 @@ services:
       options:
         max-size: 10m
         max-file: '5'
+    networks:
+      - default
+
+  notifications:
+    image: ghcr.io/dalvers2001/pixaeron-notifications:${NOTIFICATIONS_IMAGE_TAG:-sha-not-configured}
+    restart: unless-stopped
+    env_file:
+      - path: ${NOTIFICATIONS_RUNTIME_ENV_FILE:-/opt/pixaeron/notifications.env}
+        format: raw
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      NOTIFICATIONS_GRPC_HOST: notifications-command
+      NOTIFICATIONS_GRPC_PORT: 50052
+    volumes:
+      - ${PIXAERON_CERTS_DIR:-/opt/pixaeron/certs}/global-bundle.pem:/app/certs/global-bundle.pem:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3004/notifications/health/ready').then((response) => {
+            if (!response.ok) process.exit(1);
+          }).catch(() => process.exit(1));
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    networks:
+      notifications_command:
+        aliases:
+          - notifications-command
+      notifications_egress:
 
   auth:
-    image: ghcr.io/dalvers2001/pixaeron-auth:${AUTH_IMAGE_TAG:-latest}
+    image: ghcr.io/dalvers2001/pixaeron-auth:${AUTH_IMAGE_TAG:-sha-not-configured}
     restart: unless-stopped
     env_file:
       - path: ${AUTH_RUNTIME_ENV_FILE:-/opt/pixaeron/auth.env}
@@ -33,6 +72,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       REDIS_URL: redis://redis:6379
+      NOTIFICATIONS_GRPC_URL: notifications-command:50052
+      NOTIFICATIONS_GRPC_DEADLINE_MS: 2000
+      EMAIL_ACTION_RESPONSE_BUDGET_MS: 2500
     # Host-private operations and rollback endpoint; never routed publicly by Caddy.
     ports:
       - '127.0.0.1:3000:3000'
@@ -59,9 +101,12 @@ services:
       options:
         max-size: 10m
         max-file: '5'
+    networks:
+      - default
+      - notifications_command
 
   gateway:
-    image: ghcr.io/dalvers2001/pixaeron-gateway:${GATEWAY_IMAGE_TAG:-latest}
+    image: ghcr.io/dalvers2001/pixaeron-gateway:${GATEWAY_IMAGE_TAG:-sha-not-configured}
     restart: unless-stopped
     env_file:
       - path: ${GATEWAY_RUNTIME_ENV_FILE:-/opt/pixaeron/gateway.env}
@@ -90,6 +135,13 @@ services:
       options:
         max-size: 10m
         max-file: '5'
+    networks:
+      - default
+
+networks:
+  notifications_command:
+    internal: true
+  notifications_egress:
 
 volumes:
   redis_data:

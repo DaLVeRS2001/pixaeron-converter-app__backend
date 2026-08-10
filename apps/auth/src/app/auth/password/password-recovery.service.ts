@@ -39,46 +39,52 @@ export class PasswordRecoveryService {
     request: Request,
   ): Promise<AuthRequestResult> {
     this.emailDelivery.assertAvailable();
-    const normalizedEmail = normalizeEmail(email);
-    await this.challengePolicy.prepareEmailAction(
-      'forgot_password',
-      normalizedEmail,
-      captchaToken,
-      request,
-    );
 
-    const user = await this.userService.getUser({ email: normalizedEmail });
+    await this.emailDelivery.runGenericEmailAction(async () => {
+      const normalizedEmail = normalizeEmail(email);
+      await this.challengePolicy.prepareEmailAction(
+        'forgot_password',
+        normalizedEmail,
+        captchaToken,
+        request,
+      );
 
-    if (user?.password) {
-      const token = await this.prisma.$transaction(async (transaction) => {
-        const issued = await this.authTokenService.issueInTransaction(
-          transaction,
-          user.id,
-          AuthTokenType.PASSWORD_RESET,
-        );
+      const user = await this.userService.getUser({
+        email: normalizedEmail,
+      });
+
+      if (user?.password) {
+        const token = await this.prisma.$transaction(async (transaction) => {
+          const issued = await this.authTokenService.issueInTransaction(
+            transaction,
+            user.id,
+            AuthTokenType.PASSWORD_RESET,
+          );
+          await this.sessionAuditService.recordSecurityEvent(
+            SessionEventType.PASSWORD_RESET_REQUESTED,
+            request,
+            user.id,
+            undefined,
+            transaction,
+          );
+          return issued;
+        });
+
+        await this.emailDelivery.sendPasswordResetAfterCommit({
+          userId: user.id,
+          publicSubject: user.publicId,
+          recipient: user.email,
+          token,
+          request,
+        });
+      } else {
         await this.sessionAuditService.recordSecurityEvent(
           SessionEventType.PASSWORD_RESET_REQUESTED,
           request,
-          user.id,
-          undefined,
-          transaction,
+          user?.id,
         );
-        return issued;
-      });
-
-      await this.emailDelivery.sendPasswordResetAfterCommit(
-        user.id,
-        user.email,
-        token,
-        request,
-      );
-    } else {
-      await this.sessionAuditService.recordSecurityEvent(
-        SessionEventType.PASSWORD_RESET_REQUESTED,
-        request,
-        user?.id,
-      );
-    }
+      }
+    });
 
     return { accepted: true };
   }

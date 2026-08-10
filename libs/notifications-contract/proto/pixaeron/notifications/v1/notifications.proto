@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package pixaeron.notifications.v1;
+
+service NotificationsEmailService {
+  rpc SendSecurityEmail(SendSecurityEmailRequest)
+      returns (SendSecurityEmailResponse);
+}
+
+enum SecurityEmailPurpose {
+  SECURITY_EMAIL_PURPOSE_UNSPECIFIED = 0;
+  SECURITY_EMAIL_PURPOSE_EMAIL_VERIFICATION = 1;
+  SECURITY_EMAIL_PURPOSE_PASSWORD_RESET = 2;
+}
+
+enum SendSecurityEmailResult {
+  SEND_SECURITY_EMAIL_RESULT_UNSPECIFIED = 0;
+  SEND_SECURITY_EMAIL_RESULT_ACCEPTED = 1;
+  SEND_SECURITY_EMAIL_RESULT_FAILED = 2;
+  SEND_SECURITY_EMAIL_RESULT_SUPPRESSED = 3;
+  SEND_SECURITY_EMAIL_RESULT_SUBMISSION_UNKNOWN = 4;
+  SEND_SECURITY_EMAIL_RESULT_REJECTED = 5;
+}
+
+message SendSecurityEmailRequest {
+  string request_id = 1;
+  string public_subject = 2;
+  string recipient = 3;
+  SecurityEmailPurpose purpose = 4;
+  string token = 5;
+  uint32 content_version = 6;
+}
+
+message SendSecurityEmailResponse {
+  SendSecurityEmailResult result = 1;
+  optional string code = 2;
+}

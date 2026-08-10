@@ -18,12 +18,14 @@ describe('PasswordRecoveryService', () => {
   const challengePolicy = { prepareEmailAction: jest.fn() };
   const emailDelivery = {
     assertAvailable: jest.fn(),
+    runGenericEmailAction: jest.fn(),
     sendPasswordResetAfterCommit: jest.fn(),
   };
   const request = {} as Request;
   const response = {} as Response;
   const user = {
     id: 1,
+    publicId: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
     email: 'user@example.com',
     username: 'user',
     emailVerified: true,
@@ -40,6 +42,9 @@ describe('PasswordRecoveryService', () => {
     sessionAuditService.recordSecurityEvent.mockResolvedValue(undefined);
     authTokenService.issueInTransaction.mockResolvedValue('raw-reset-token');
     challengePolicy.prepareEmailAction.mockResolvedValue(undefined);
+    emailDelivery.runGenericEmailAction.mockImplementation((action) =>
+      action(),
+    );
     emailDelivery.sendPasswordResetAfterCommit.mockResolvedValue(undefined);
 
     service = new PasswordRecoveryService(
@@ -79,29 +84,39 @@ describe('PasswordRecoveryService', () => {
       undefined,
       transaction,
     );
-    expect(emailDelivery.sendPasswordResetAfterCommit).toHaveBeenCalledWith(
-      1,
-      'user@example.com',
-      'raw-reset-token',
+    expect(emailDelivery.sendPasswordResetAfterCommit).toHaveBeenCalledWith({
+      userId: 1,
+      publicSubject: '0198f687-15d8-7f5e-bd79-62f8f4d51e07',
+      recipient: 'user@example.com',
+      token: 'raw-reset-token',
       request,
-    );
+    });
   });
 
-  it('keeps reset requests generic for passwordless accounts', async () => {
-    userService.getUser.mockResolvedValue({ ...user, password: null });
+  it.each([
+    ['a passwordless account', { ...user, password: null }, 1],
+    ['an unknown email', null, undefined],
+  ])(
+    'keeps reset requests generic for %s',
+    async (_scenario, resolvedUser, expectedUserId) => {
+      userService.getUser.mockResolvedValue(resolvedUser);
 
-    await expect(
-      service.requestPasswordReset({ email: user.email }, request),
-    ).resolves.toEqual({ accepted: true });
+      await expect(
+        service.requestPasswordReset({ email: user.email }, request),
+      ).resolves.toEqual({ accepted: true });
 
-    expect(authTokenService.issueInTransaction).not.toHaveBeenCalled();
-    expect(emailDelivery.sendPasswordResetAfterCommit).not.toHaveBeenCalled();
-    expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
-      'PASSWORD_RESET_REQUESTED',
-      request,
-      1,
-    );
-  });
+      expect(authTokenService.issueInTransaction).not.toHaveBeenCalled();
+      expect(emailDelivery.sendPasswordResetAfterCommit).not.toHaveBeenCalled();
+      expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
+        'PASSWORD_RESET_REQUESTED',
+        request,
+        expectedUserId,
+      );
+      expect(emailDelivery.runGenericEmailAction).toHaveBeenCalledWith(
+        expect.any(Function),
+      );
+    },
+  );
 
   it('consumes token, changes password, and revokes sessions in one transaction', async () => {
     const transaction = {
