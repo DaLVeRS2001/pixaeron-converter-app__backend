@@ -291,22 +291,31 @@ reference it any more.
      in its own commit. Add that commit to `.git-blame-ignore-revs` if blame
      noise ever matters.
 
-12. Operational documentation lives outside Git — DECIDED 2026-08-12.
-    The repositories will be public, so the guides will move to a separate
-    (private) docs repository owned by the operator; they stay ignored here.
-    Facts that informed the decision, kept for the move: 21 guides plus 2 plans
-    (~6,100 lines) in the backend and 6 files (~610 lines) in the frontend; a
-    secret scan over `docs/` is clean (no account IDs, keys, tokens, JWTs, PEM
-    blocks, database endpoints or real host IPs; ARNs carry placeholder account
-    fields), so nothing blocks copying them out as-is.
-    - operator: create the docs repository and move `docs/` from both projects.
-    - Do NOT move `docs/deploy_examples/` — both trees are hand-copied forks
-      that have drifted, and the `with-aws-parameter-store` copy still ships the
-      `upsert_env_value` global-scope bug fixed upstream on 2026-08-10. Delete
-      them; the pinned upstream workflow is the reference.
-    - Since the repositories will be public: add a gitleaks gate to CI before
-      flipping visibility, and re-check that no local-only file (todo.txt
-      included) names private infrastructure when that day comes.
+12. Public-repository hardening — DONE (2026-08-12), one operator step left.
+    The repositories are ALREADY public and always have been, so their Actions
+    logs are public too. Response landed:
+    - Gitleaks over the full history of all three repos. Two hits, both the same
+      dead value: a placeholder-shaped `JWT_SECRET` in `.env.example` at two
+      2026-07-07 commits, before any production infrastructure existed. Not a
+      live credential — the schema no longer accepts `JWT_SECRET` (auth uses
+      `JWT_PRIVATE_KEY_BASE64`), and it is a stale SSM parameter marked for
+      deletion below. Suppressed by fingerprint in `.gitleaksignore`; frontend
+      and central CI are clean.
+    - A `Secret scan` workflow (gitleaks pinned by digest, full history) runs on
+      push and PR in every repo, so a future paste is caught before merge.
+    - `prepare-runtime-envs.sh` now `::add-mask::`s every SecureString value it
+      reads from SSM, so a decrypted secret can never surface in a deploy log.
+      The CI-generated `JWT_PRIVATE_KEY_BASE64` was already masked.
+    - operator: the deploy logs you have already seen expose the Lightsail
+      database hostname (`ls-….rds.amazonaws.com`). That is not secret on its
+      own — the instance is not publicly reachable and auth still needs the
+      password — but rotate the DB password if you want the pre-masking logs
+      neutralised, and note it reinforces item 6 (least-privilege DB role).
+    Documentation still lives outside Git and moves to a separate repo by owner
+    decision. Do NOT move `docs/deploy_examples/` — both trees are drifted
+    hand-copies and the `with-aws-parameter-store` one still ships the
+    `upsert_env_value` global-scope bug fixed upstream on 2026-08-10; delete
+    them, the pinned upstream workflow is the reference.
 
 # Candidate topology (planned, not implemented)
 
