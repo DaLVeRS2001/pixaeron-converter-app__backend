@@ -122,7 +122,8 @@
       "options": {
         "commands": [
           "prisma migrate deploy --config apps/notifications/prisma.config.ts",
-          "prisma db execute --config apps/notifications/prisma.config.ts --file apps/notifications/scripts/postgres-integration.sql"
+          "prisma db execute --config apps/notifications/prisma.config.ts --file apps/notifications/scripts/postgres-integration.sql",
+          "jest --config apps/notifications/jest.integration.config.cts --runInBand"
         ],
         "parallel": false,
         "cwd": "{workspaceRoot}"
