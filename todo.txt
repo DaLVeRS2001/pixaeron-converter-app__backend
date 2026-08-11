@@ -3,61 +3,87 @@
 Verified against the repositories on 2026-08-11. Items marked "operator" cannot
 be checked from the code and need the AWS / Google / Cloudflare consoles.
 
-1. SES rollout — DONE through Stage C; only the tail remains.
+`docs/todo.md` no longer exists. It was retired on 2026-08-11 into
+`docs/notifications-operations-guide.md` and into this file, so nothing should
+reference it any more.
+
+1. SES rollout — DONE through Stage C; only the operator tail remains.
    Live in production: notifications deployed, email delivery on, feedback
    consumer polling, bounce and complaint suppression proven end to end.
    Remaining, in order:
-   - DLQ drill (docs/todo.md 13.2 Phase B): publish one drill message to
-     `pixaeron-ses-feedback-production-events`, watch it fail validation, reach
-     the DLQ after five receives, raise the DLQ alarm, then delete only that
-     message. Phase A is already proven — the age alarm fired for real on the
-     SES validation notice, no need to repeat it.
-   - Public Auth behaviour checks (13.3).
-   - SES reputation alarms (10.2). Metrics did not exist before the first send;
+   - DLQ drill. Publish one drill message to the SNS topic
+     `pixaeron-ses-feedback-production-events` (not the legacy
+     `pixaeron-ses-feedback-production`, whose only subscriber is the operator
+     mailbox), watch it fail validation, reach the DLQ after five receives,
+     raise the DLQ alarm, then delete only that message. The age alarm already
+     fired for real on the SES validation notice, so that half is proven.
+   - Public Auth behaviour checks against production.
+   - SES reputation alarms. The metrics did not exist before the first send;
      they do now.
-   - Release C cleanup (17.1): drop the old identity-level bounce/complaint
-     route and its email subscription, delete the old
-     `pixaeron-ses-feedback-production` topic, and remove the dead Auth SSM
-     parameters `AWS_REGION`, `SES_FROM_EMAIL`, `FRONTEND_URL`, `JWT_SECRET`.
-     Note they are not "rejected by the environment contract" — Auth validates
-     with `allowUnknown: true`, so they are silently ignored, not refused.
+   - Release C cleanup: drop the old identity-level bounce/complaint route and
+     its email subscription, delete the old `pixaeron-ses-feedback-production`
+     topic, and remove the dead Auth SSM parameters `AWS_REGION`,
+     `SES_FROM_EMAIL`, `FRONTEND_URL`, `JWT_SECRET`. They are not "rejected by
+     the environment contract" — `app.module.ts:31` validates with
+     `allowUnknown: true`, so they are silently ignored, not refused.
 
 2. Throughput and multi-replica tests — NOT STARTED.
-   No load tooling exists (no k6, artillery, autocannon or benchmark scripts;
-   all 45 spec files are mocked Jest unit tests). The concurrency-looking specs
-   mock the shared dependency, so they exercise the service's reaction to a
-   canned answer rather than a real race. Targets: shared rate limits, refresh
-   concurrency, cleanup advisory locks, Redis failure behaviour.
+   No load tooling exists: k6, artillery, autocannon, testcontainers, locust,
+   jmeter and vegeta return zero hits across the workspace.
+   The old note claimed "all 45 spec files are mocked Jest unit tests". That is
+   wrong — real-infrastructure tooling already exists and a concurrency test
+   needs no new dependency:
+   - `apps/auth/.../notifications-email.client.integration.spec.ts` boots a real
+     grpc-js server on a real socket.
+   - `apps/notifications/scripts/postgres-integration.sql` runs against real
+     Postgres through the `db-integration` target.
+   - `apps/auth-e2e` serves Auth and drives it over HTTP.
+   - Central CI already provisions `postgres:18` and `redis:8-alpine` and runs
+     both `db-integration` and `e2e`.
+   The real gap is that concurrency is never exercised: for example
+   `libs/redis/src/lib/redis-lock.service.spec.ts` replaces Redis with
+   `{ set, eval }` mocks, so it asserts argument shape and never atomicity.
+   Highest-value targets, in order:
+   - Recipient-alias convergence under two concurrent transactions through
+     `lockRecipientAliases`, on real Postgres. This is the evidence the
+     convergence fix in item 11 deserves before the first HMAC key rotation.
+   - Refresh-token rotation and family reuse under parallel refresh in
+     `apps/auth-e2e`; `auth-token.service.ts:32` relies on
+     `pg_advisory_xact_lock`.
+   - The shared HTTP rate limit against real Redis, including the 503 fallback
+     in `http-rate-limit.middleware.ts:76-80`, which is untested.
 
 3. Google Sign-In: remaining production gates.
    Sign-in works in production, the site is public over HTTPS with `/privacy`
-   and `/terms`, and the client IDs match. Left:
+   and `/terms`, and the client IDs match.
+   - Content-Security-Policy and COOP: DONE in code. `public/_headers` now sets
+     `Cross-Origin-Opener-Policy: same-origin-allow-popups` and a
+     **report-only** policy, and `scripts/check-cloudflare-build.mjs` asserts the
+     parsed structure per directive instead of matching substrings.
+     Remaining: deploy, watch the browser console for a week, then rename
+     `Content-Security-Policy-Report-Only` to `Content-Security-Policy`.
+     Expect exactly one benign violation — Zod's `new Function("")` capability
+     probe, which is caught and falls back to its jitless path. Do NOT add
+     `'unsafe-eval'` because of it, and never harden COOP to `same-origin`:
+     that silently kills the Google sign-in callback.
    - operator: confirm the Auth Platform audience is **In production**, not
      Testing — in Testing the flow still works for listed test users, so the
      owner's own account proves nothing.
-   - Add Content-Security-Policy and COOP to `public/_headers`. Verified
-     missing: only `X-Content-Type-Options`, `X-Frame-Options`,
-     `Referrer-Policy` and `Permissions-Policy` are set. This is the gate with a
-     real security effect — the app loads Google Identity Services and
-     Cloudflare Turnstile at runtime and holds an HttpOnly session, so any XSS
-     currently has full DOM access. `scripts/check-cloudflare-build.mjs` does not
-     require the header either; add it there once set.
    - operator: confirm `support@pixaeron.com` is monitored and the policy text
      is owner-approved.
    - Negative-path tests in a fresh browser: blocked or failed GIS load, wrong
      audience, expired token, account-link-required, CAPTCHA retry, and a Google
-     account outside the test-user list.
+     account outside the test-user list. Exercise Turnstile on `/sign-in`,
+     `/sign-up`, `/forgot-password` and `/verify-email` — all four render it.
 
 4. Frontend: the pipeline works, the deployed version is stale.
-   CI is published, the pin (`pixaeron-frontend.yml@8de5d04`) is valid and does
-   not need bumping — none of the later central commits touched that file. The
-   first Cloudflare deployment succeeded and the custom domain is bound.
-   The problem is drift: the operator's record of verified external state is
-   dated 2026-07-26 and predates both the current pin and the
-   "route GraphQL through the gateway" commit, and `main` is behind anyway —
-   `origin/dev` has 2 unmerged commits plus 17 uncommitted post-review files.
-   - Commit the 17 local changes and merge `dev` into `main`, then deploy.
-     Frontend tests pass with those changes applied: 18 suites, 76 tests.
+   CI is published and the pin (`pixaeron-frontend.yml@8de5d04`) is valid — none
+   of the later central commits touched that file. The first Cloudflare
+   deployment succeeded and the custom domain is bound.
+   The earlier note claimed 17 uncommitted files; that was already stale when it
+   was written. The tree is clean and pushed.
+   - Merge `dev` into `main` and deploy. Local `main` is far behind its remote,
+     so fetch and reset it before merging.
    - operator: confirm what is actually live — Cloudflare -> Workers & Pages ->
      `pixaeron-web` -> Deployments records `owner/repo@SHA` per version.
    - operator: confirm `https://api.pixaeron.com/graphql` terminates on the
@@ -102,16 +128,36 @@ be checked from the code and need the AWS / Google / Cloudflare consoles.
    client. Every other email flow is privacy-preserving: password reset and
    resend always return `{ accepted: true }`.
    Important: **the code itself is the oracle**, so rewriting only the message
-   changes nothing — Option B must also remove the code from `publicErrorCodes`
-   and update `registration.service.spec.ts:152`, which currently asserts it.
+   changes nothing — Option B must also remove the code from `publicErrorCodes`.
    - Option A (keep): accept the trade-off for the clearer UX and record it as a
      deliberate decision.
    - Option B (close): always answer "check your email"; send verification to a
      new address and "someone tried to register with your address" to an
-     existing one. Costs one more template and a less direct hint for the user.
+     existing one. Cheaper than it looks: only the P2002 branch is spec-covered
+     (`registration.service.spec.ts:152`), the frontend cost is deleting five
+     references to `emailAlreadyRegistered`, and the success path already does
+     the right thing — `useSignUpModel.ts` navigates to `/verify-email` on
+     `accepted`. One backend detail: the existing-account branch creates no row,
+     so the resolver must echo the normalized input address rather than
+     `registration.user.email`.
    Decide before public launch rather than by default.
 
 8. ACCEPTED BEHAVIOUR, not tasks. Recorded so nobody "fixes" them later.
+
+   (a) Password recovery sends nothing for a Google-only account.
+   `password-recovery.service.ts:56` mails the reset link only
+   `if (user?.password)`; an account created through Google Sign-In has no
+   password, so an audit event is recorded and no mail is sent, while the form
+   still answers "if the account exists, the message is on its way". Confirmed
+   in production on 2026-08-11 — no `email_deliveries` row is created at all.
+   The generic answer is deliberate: a different response would reveal how the
+   account was registered. Owner decision (2026-08-11): keep the backend as is —
+   sending a "you signed up with Google" mail would mean a third purpose in the
+   gRPC contract for little gain.
+   Closed on the frontend instead: the recovery form carries a permanent hint
+   ("Signed up with Google? A reset link will not arrive — use Continue with
+   Google"), rendered unconditionally so it cannot react to the entered address
+   and therefore leaks nothing. Do not make that hint conditional.
 
    (b) A used reset link still renders the form; the failure appears only after
    submitting ("this link has already been used"). Single use is enforced in the
@@ -123,98 +169,124 @@ be checked from the code and need the AWS / Google / Cloudflare consoles.
    answers without hitting the submit rate limit. Owner decision (2026-08-11):
    keep as is.
 
-   (a) Password recovery sends nothing for a Google-only account. `password-recovery.service.ts:56` mails the reset link
-   only `if (user?.password)`; an account created through Google Sign-In has no
-   password, so an audit event is recorded and no mail is sent, while the form
-   still answers "if the account exists, the message is on its way". Confirmed
-   in production on 2026-08-11 — no `email_deliveries` row is created at all.
-   The generic answer is deliberate: a different response would reveal how the
-   account was registered. Owner decision (2026-08-11): keep the backend as is —
-   sending a "you signed up with Google" mail would mean a third purpose in the
-   gRPC contract for little gain.
-   Closed on the frontend instead: the recovery form now carries a permanent
-   hint ("Signed up with Google? A reset link will not arrive — use Continue
-   with Google"), rendered unconditionally so it cannot react to the entered
-   address and therefore leaks nothing. Do not make that hint conditional.
+9. Verify-email page — DONE (2026-08-11).
+   The header no longer renders pending instructions once the address is
+   confirmed, and an authenticated user whose address is already verified now
+   sees the confirmed state instead of a resend form that silently sends
+   nothing. The state comes from `emailVerified` on the `me` query, which the
+   frontend already selected, so no schema change was needed. The override is
+   gated on the page's own status still being `CHECK_EMAIL`, so a real token
+   outcome always wins, and anonymous visitors are untouched — anything else
+   there would be an enumeration oracle.
 
-9. Small verify-email page fixes (cosmetic, no security impact).
-   - Contradictory copy: `VerifyEmailPanel.tsx:74-79` picks the title from
-     `model.verified` but the paragraph from `model.maskedEmail`, so a confirmed
-     address with no known email renders "Email confirmed" above "Open the link
-     from the email to confirm your account". Drive both from the same state.
-   - A signed-in user whose address is already confirmed still sees the resend
-     form when they open `/verify-email` directly: `verified` is derived from the
-     page's own status (`useVerifyEmailModel.ts:137`), so a fresh visit knows
-     nothing. The resend then succeeds silently and sends no mail. For an
-     authenticated user the frontend already knows the verification state from
-     `me` and can show "already verified" instead — no leak, because the user is
-     authenticated. Nothing can be done for anonymous visitors without turning
-     the page into an enumeration oracle.
+10. Error messages now follow a language switch — DONE (2026-08-11).
+   The five auth models store `{ code, action, retryAfter }` and translate on
+   render, so switching language re-renders the visible error.
+   `translateAuthError` split into `resolveAuthError` and `authErrorMessage`,
+   which makes error state assertable without i18n.
+   Closed at the same time: `TOO_MANY_REQUESTS` and `SERVICE_UNAVAILABLE` were
+   produced by `shared/api/errors.ts` but had no message, so a Redis outage
+   rendered "Something went wrong"; `CAPTCHA_INVALID` was aliased to
+   "Complete the CAPTCHA verification", which was misleading; the three
+   attempt-limit codes reached the generic fallback whenever `retryAfter` was
+   absent; and `errors.googleUnavailable` was set as a bare literal with no code.
+   Still open, same root cause, different place: every zod schema in
+   `features/auth/model/schemas.ts` bakes translated strings into resolver
+   output, and `useSignUpModel` writes `t('validation.terms')` into react-hook-
+   form state. Field-level validation errors therefore still do not follow a
+   language switch.
 
-10. Error messages do not follow a language switch.
-   Translation works, but only for the next error: switching language while an
-   error is on screen leaves the old text. The models store the translated
-   string instead of the error identity — 13 assignments across 5 model files
-   (`useSignInModel` 57, 83, 141, 145; `useSignUpModel` 101, 148, 152;
-   `useRequestPasswordResetModel` 52, 70; `useResetPasswordModel` 43;
-   `useVerifyEmailModel` 68, 112, 134). Re-rendering cannot help a frozen string.
-   Fix: keep `{ code, retryAfter }` in state and translate during render, so
-   `useTranslation` re-runs on a language change. This also drops `t` from the
-   models' dependency lists and makes error state testable without i18n.
-   While there, audit `graphql-error-contract.ts` against
-   `features/auth/model/errors.ts` and the `en`/`ru` dictionaries so every
-   backend code has its own message and the generic fallback is reserved for
-   genuinely unknown codes.
-
-10. Deferred code work — all still open.
-   - **HMAC-alias convergence is no longer dormant.** The nonterminal path in
-     `ses-feedback-transitions.ts` updates each alias independently with no
-     convergence step, unlike the terminal path. The old note said this was
-     dormant while the feedback consumer was off — that flag has been `true`
-     since 2026-08-11, so the premise is dead. Treat it as a **precondition for
-     the first HMAC key rotation** (docs/todo.md §15.2), not as deferred work.
-   - Central CI rollback restores the compose file from the wrong baseline for
-     the second and later services of an ordered release. Needs a staging VPS to
-     verify a fix.
-   - `workflow_dispatch` naming a single service silently deploys nothing: run
-     #36 on `main` with `service=notifications` passed verification, skipped
-     `build-images` and `deploy-release` on an empty matrix, and still reported
-     success. `service=all` works. Scope: only this path — `pull_request` runs
-     verification with an intentionally empty selection, and a push to `main`
-     selects by `nx affected`, so merge-driven releases are fine. It matters for
-     configuration-only redeploys, where no code changes. Fix regardless of root
-     cause: an empty selection on an explicit dispatch is a contradiction and
-     must `exit 1`, and the matrix step must log its selection.
+11. Deferred code work.
+   - HMAC-alias convergence — DONE (2026-08-11). The nonterminal path in
+     `ses-feedback-transitions.ts` now converges every non-blocked alias onto
+     the authoritative watermark, as the terminal path already did. Without it,
+     a two-version keyring could leave one alias `TEMPORARY_FAILURE@T10` and
+     another `ACTIVE@T5`; the retention cron then deletes the retired-key row
+     holding the correct watermark and the regression becomes permanent. The
+     convergence is skipped when the keyring has a single version, so the hot
+     path is unchanged today.
    - The private Auth -> Notifications gRPC channel has no TLS and no
-     authentication (`createInsecure()` on both ends, no guard or interceptor),
-     and raw one-time tokens travel over it. Only the internal Compose network
-     protects it today. Add mTLS or a shared secret in metadata before a second
-     consumer joins the command network.
-   - Remaining duplication: sender regex (`notifications-environment.schema.ts:29`
-     and `ses-email.service.ts:274`), CAS lease-expiry (`security-email.service.ts`
-     `expireClaim` and `email-submission-reconciliation.service.ts`
-     `expireStaleClaims`), cross-service Joi primitives, central CI setup blocks,
-     and the `docs/deploy_examples` forks. Already extracted: `Transaction` and
-     `isUniqueConstraintError` into `prisma.support.ts`, plus
-     `recipientHashFilter` and `matchesRecipientHash`.
-   - Auth `User` has no `@@map`, so its table is `"User"` while every other model
-     maps to snake_case plural. Cosmetic — Prisma quotes correctly — but
-     hand-written SQL needs `FROM "User"`. Fixing means a table rename on the
-     production database; schedule it alone with a snapshot.
-   - No `.gitattributes`, and `notifications.proto` already reports
-     `i/mixed w/mixed`. Byte-comparing checks are what break: `contracts-check`
-     and `codegen:check` diff generated output, and a stray `\r` in a shell
-     script makes `#!/usr/bin/env bash` an invalid interpreter path. Add
-     `* text=auto eol=lf` plus explicit `*.sh text eol=lf` and `binary` entries,
-     then `git add --renormalize .` in its own commit.
+     authentication, and raw one-time tokens travel over it together with the
+     plaintext recipient address. Note `createInsecure()` appears nowhere in
+     application code — the channel is insecure by omission: neither
+     `main.ts:27-34` nor `auth.module.ts:42-52` passes `credentials`, and Nest
+     falls back to insecure. The controller takes `_metadata` and never reads
+     it. Exposure is contained: `notifications_command` is `internal: true`,
+     port 50052 is unpublished, and the server binds only the network alias.
+     Minimal fix before a second consumer joins: a shared secret in metadata
+     compared with `timingSafeEqual` in a guard — not mTLS, which buys nothing
+     against an attacker who already has container access.
+   - Central CI rollback restores the compose file from the wrong baseline for
+     the second and later services of an ordered release. Confirmed by reading
+     `deploy-service.sh:23,37-40,106,154` against the per-service `scp` inside
+     the deploy loop — no staging VPS is needed to see it. Service #2 backs up
+     service #1's already-installed new compose, and service #1's success path
+     has already deleted the true baseline. Fix by removing the bug class: the
+     compose file is a whole-stack artifact, so install it once per release,
+     back it up once, restore it on failure, and take it out of per-service
+     rollback entirely.
+   - `workflow_dispatch` naming a single service. The earlier diagnosis — "an
+     empty deploy matrix" — is WRONG. On the pinned revision `service=notifications`
+     selects one row: notifications is in `.github/deploy-services.json`, it has
+     no `schema-check` target so the subgraph guard does not fire, and an
+     unknown name hard-fails an earlier step. Two real paths remain to a green
+     run that deployed nothing, and neither is announced: the release jobs are
+     gated on `github.ref == 'refs/heads/main'`, and `release_guard` sets
+     `deploy=false` when `git ls-remote` shows main has moved, after which every
+     later step is skipped and the job still reports success.
+     Fix regardless of which one it was: log the selection in the matrix step,
+     expose from `deploy-release` whether a release actually executed, and fail
+     an explicit dispatch that verified successfully on `main` and released
+     nothing. Do not weaken the `has_deployments` job gate — `pull_request` runs
+     are intentionally empty and depend on it.
+   - Remaining duplication. Already extracted: `Transaction`,
+     `isUniqueConstraintError` (both services now), `recipientHashFilter`,
+     `matchesRecipientHash`, the SES sender parser and the lease-expiry payload.
+     Left: the cross-service Joi primitives (`booleanValue`, `NODE_ENV`, `PORT`,
+     `DATABASE_URL`), which need a new `libs/config` — not `libs/nestjs`, whose
+     barrel pulls in express and would give a gRPC-only service an HTTP-server
+     dependency. Bundle that move with `normalizeEmail` / `normalizeRecipient`,
+     which are the same function in both services and are a cross-service
+     contract rather than a three-line helper: if they drift, the recipient hash
+     stops matching and suppression silently stops applying. `prisma.service.ts`
+     is byte-identical across both apps but each extends its own generated
+     client, so deduplicating it needs a generic factory — not worth it for two
+     services.
+   - Auth `User` has no `@@map`, so its table is `"User"` while every other
+     model maps to snake_case plural. The rename is metadata-only DDL — table,
+     `User_pkey`, `User_id_seq`, two unique indexes and one check constraint;
+     the four child foreign keys are already snake_case and follow the table by
+     OID. But it is not backward-compatible: the previous image's
+     `session.service.ts:78` runs `SELECT "password" FROM "User"` in raw SQL and
+     would 500 after the rename, so rollback needs the inverse DDL rather than
+     an image revert. Schedule it alone, with a snapshot.
+   - `.gitattributes` — DONE (2026-08-11) in all three repositories, together
+     with re-encoding `README.md` from UTF-16LE to UTF-8 and a renormalize pass
+     in its own commit. Add that commit to `.git-blame-ignore-revs` if blame
+     noise ever matters.
 
-11. Operational documentation lives outside Git.
-    `.gitignore:39` ignores `docs` entirely, so `docs/todo.md` — 1600+ lines and
-    the only record of this rollout — plus 20+ guides exist on one workstation
-    with no history, no review and no backup. `todo.txt` points at that file as
-    the primary checklist, and the checklist itself asks that "backend, central
-    CI and ignored documentation match the deployed state", which nothing can
-    verify. Losing the disk loses the rollout record.
+12. Operational documentation lives outside Git.
+    `.gitignore:39` ignores `docs` entirely, and the frontend has the same bare
+    `docs` ignore. The earlier claim that this risks "the only record of this
+    rollout" was wrong — that record is this file, which is tracked and pushed.
+    What is genuinely unversioned is 21 guides plus 2 plans (~6,100 lines) in the
+    backend and 6 files (~610 lines) in the frontend.
+    A secret scan over `docs/` is clean: no account IDs, access keys, tokens,
+    OAuth client IDs, JWTs, PEM blocks, database endpoints or real host IPs; the
+    ARNs carry placeholder account fields and every address is a role address on
+    the project's own public domain. The one borderline value is the Apollo
+    graph ref, which is already public as `vars.APOLLO_GRAPH_REF`.
+    - Narrow the ignore to scratch paths and commit the guides.
+    - Delete `docs/deploy_examples/` rather than committing it. Both trees are
+      hand-copied forks that have drifted, and the `with-aws-parameter-store`
+      copy still ships the version of `upsert_env_value` whose `key` and `value`
+      leak into the global shell scope — fixed upstream on 2026-08-10. Replace
+      them with a link to the pinned upstream workflow plus a paragraph on the
+      parameter-store-versus-github-envs choice, which is the only thing the two
+      directories actually communicate.
+    - If the repositories are or will be public, add a gitleaks gate at the same
+      time. The docs are clean today, but 6,100 lines of operational prose is
+      exactly where a pasted console output eventually lands.
 
 # Candidate topology (planned, not implemented)
 
