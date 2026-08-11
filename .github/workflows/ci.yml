@@ -25,7 +25,7 @@ jobs:
       contents: read
       id-token: write
       packages: write
-    uses: DaLVeRS2001/ci/.github/workflows/pixaeron.yml@26bc2cfcd2adc9ed43e2dc85e1379ae6c99726c0
+    uses: DaLVeRS2001/ci/.github/workflows/pixaeron.yml@6fce9b19167e53e2aa4e6730a2a9f03c742d4746
     with:
       service: ${{ inputs.service || 'all' }}
       apollo_graph_ref: ${{ vars.APOLLO_GRAPH_REF }}
