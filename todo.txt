@@ -225,20 +225,21 @@ reference it any more.
      compose file is a whole-stack artifact, so install it once per release,
      back it up once, restore it on failure, and take it out of per-service
      rollback entirely.
-   - `workflow_dispatch` naming a single service. The earlier diagnosis — "an
-     empty deploy matrix" — is WRONG. On the pinned revision `service=notifications`
-     selects one row: notifications is in `.github/deploy-services.json`, it has
-     no `schema-check` target so the subgraph guard does not fire, and an
-     unknown name hard-fails an earlier step. Two real paths remain to a green
-     run that deployed nothing, and neither is announced: the release jobs are
-     gated on `github.ref == 'refs/heads/main'`, and `release_guard` sets
-     `deploy=false` when `git ls-remote` shows main has moved, after which every
-     later step is skipped and the job still reports success.
-     Fix regardless of which one it was: log the selection in the matrix step,
-     expose from `deploy-release` whether a release actually executed, and fail
-     an explicit dispatch that verified successfully on `main` and released
-     nothing. Do not weaken the `has_deployments` job gate — `pull_request` runs
-     are intentionally empty and depend on it.
+   - `workflow_dispatch` naming a single service — DONE in the central CI
+     (2026-08-11), pending a new pin. The earlier diagnosis — "an empty deploy
+     matrix" — was WRONG. `service=notifications` selects one row: notifications
+     is in `.github/deploy-services.json`, it has no `schema-check` target so the
+     subgraph guard does not fire, and an unknown name hard-fails an earlier
+     step. The two real paths to a green run that deployed nothing were the
+     unannounced `github.ref == 'refs/heads/main'` job gate and `release_guard`
+     setting `deploy=false` when `git ls-remote` shows main has moved, after
+     which every later step is skipped and the job still reports success.
+     `pixaeron.yml` now writes the selection to the step summary, exposes
+     `released` from `deploy-release`, and ends in a `release-outcome` job that
+     turns a manual release on main which deployed nothing into a red run and
+     explains a verification-only dispatch on any other ref. It is scoped to
+     `workflow_dispatch`, so `pull_request` and push-to-main are untouched.
+     Remaining: publish the central CI SHA and re-pin `ci.yml:28` in the backend.
    - Remaining duplication. Already extracted: `Transaction`,
      `isUniqueConstraintError` (both services now), `recipientHashFilter`,
      `matchesRecipientHash`, the SES sender parser and the lease-expiry payload.
