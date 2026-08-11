@@ -64,16 +64,18 @@ reference it any more.
 3. Google Sign-In: remaining production gates.
    Sign-in works in production, the site is public over HTTPS with `/privacy`
    and `/terms`, and the client IDs match.
-   - Content-Security-Policy and COOP: DONE in code. `public/_headers` now sets
-     `Cross-Origin-Opener-Policy: same-origin-allow-popups` and a
-     **report-only** policy, and `scripts/check-cloudflare-build.mjs` asserts the
-     parsed structure per directive instead of matching substrings.
-     Remaining: deploy, watch the browser console for a week, then rename
-     `Content-Security-Policy-Report-Only` to `Content-Security-Policy`.
-     Expect exactly one benign violation — Zod's `new Function("")` capability
-     probe, which is caught and falls back to its jitless path. Do NOT add
-     `'unsafe-eval'` because of it, and never harden COOP to `same-origin`:
-     that silently kills the Google sign-in callback.
+   - Content-Security-Policy and COOP: ENFORCING as of 2026-08-13, by owner
+     decision after one day of clean report-only observation (no clients, cheap
+     rollback). `public/_headers` sets
+     `Cross-Origin-Opener-Policy: same-origin-allow-popups` and a blocking
+     `Content-Security-Policy`; `scripts/check-cloudflare-build.mjs` asserts the
+     parsed structure per directive.
+     Known-benign console noise, do not "fix": one Zod `new Function("")` probe
+     (never add `'unsafe-eval'` for it), Google's COOP `postMessage` warnings
+     while sign-in works, and everything inside the Turnstile iframe. Never
+     harden COOP to `same-origin`: that silently kills the Google sign-in
+     callback. Rollback if a flow breaks: append `-Report-Only` to the header
+     name and redeploy the frontend.
    - operator: confirm the Auth Platform audience is **In production**, not
      Testing — in Testing the flow still works for listed test users, so the
      owner's own account proves nothing.
