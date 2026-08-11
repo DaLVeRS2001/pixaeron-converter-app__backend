@@ -21,6 +21,7 @@ import {
   type Transaction,
 } from '../prisma/prisma.support';
 import { PrismaService } from '../prisma/prisma.service';
+import { expiredLeaseFilter, expiredLeaseUpdate } from './delivery-lease';
 import {
   renderSecurityEmail,
   type SecurityEmailContent,
@@ -201,20 +202,8 @@ export class SecurityEmailService {
   private async expireClaim(deliveryId: string): Promise<EmailDelivery> {
     const now = new Date();
     await this.prisma.emailDelivery.updateMany({
-      where: {
-        id: deliveryId,
-        status: EmailDeliveryStatus.PENDING,
-        callerResult: null,
-        leaseExpiresAt: { lte: now },
-      },
-      data: {
-        status: EmailDeliveryStatus.SUBMISSION_UNKNOWN,
-        callerResult: EmailCommandResult.SUBMISSION_UNKNOWN,
-        callerResultCode: 'SUBMISSION_LEASE_EXPIRED',
-        failureCode: 'SUBMISSION_LEASE_EXPIRED',
-        leaseExpiresAt: null,
-        finalizedAt: now,
-      },
+      where: { id: deliveryId, ...expiredLeaseFilter(now) },
+      data: expiredLeaseUpdate(now),
     });
 
     return this.prisma.emailDelivery.findUniqueOrThrow({

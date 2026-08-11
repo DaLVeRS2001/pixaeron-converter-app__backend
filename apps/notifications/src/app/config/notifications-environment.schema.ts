@@ -1,5 +1,7 @@
 import * as Joi from 'joi';
 
+import { parseSenderAddress } from '../delivery/sender-address';
+
 const booleanValue = Joi.string().valid('true', 'false').required();
 const keyVersion = Joi.number().integer().min(1).max(2_147_483_647).raw();
 const emailAddress = Joi.string().email({ tlds: { allow: false } });
@@ -26,10 +28,9 @@ const recipientHmacKeyring = Joi.string()
 const sesSender = Joi.string()
   .trim()
   .custom((value: string, helpers) => {
-    const match = /^(?:[^<>\r\n]*<([^<>\r\n]+)>|([^<>\r\n]+))$/.exec(value);
-    const address = match?.[1] ?? match?.[2];
+    const address = parseSenderAddress(value);
 
-    return address && !emailAddress.validate(address.trim()).error
+    return address && !emailAddress.validate(address).error
       ? value
       : helpers.error('string.email');
   }, 'SES sender')
