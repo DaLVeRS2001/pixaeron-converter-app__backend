@@ -47,9 +47,14 @@ reference it any more.
    `libs/redis/src/lib/redis-lock.service.spec.ts` replaces Redis with
    `{ set, eval }` mocks, so it asserts argument shape and never atomicity.
    Highest-value targets, in order:
-   - Recipient-alias convergence under two concurrent transactions through
-     `lockRecipientAliases`, on real Postgres. This is the evidence the
-     convergence fix in item 11 deserves before the first HMAC key rotation.
+   - Recipient-alias convergence — DONE (2026-08-12).
+     `ses-feedback-transitions.integration.spec.ts` runs inside the
+     `db-integration` target (after migrations, so it sees the real schema and
+     skips when DATABASE_URL is absent) and proves two things on real Postgres:
+     an out-of-order nonterminal event converges a freshly created alias onto
+     the authoritative watermark, and two concurrent transactions through
+     `lockRecipientAliases` leave every alias identical. Mutation-checked: with
+     the convergence call removed the first case fails.
    - Refresh-token rotation and family reuse under parallel refresh in
      `apps/auth-e2e`; `auth-token.service.ts:32` relies on
      `pg_advisory_xact_lock`.
@@ -222,15 +227,15 @@ reference it any more.
      restarts — enable during a quiet hour. TLS/mTLS remains unnecessary while
      the channel stays inside one Docker host (`notifications_command` is
      `internal: true`, port 50052 unpublished).
-   - Central CI rollback restores the compose file from the wrong baseline for
-     the second and later services of an ordered release. Confirmed by reading
-     `deploy-service.sh:23,37-40,106,154` against the per-service `scp` inside
-     the deploy loop — no staging VPS is needed to see it. Service #2 backs up
-     service #1's already-installed new compose, and service #1's success path
-     has already deleted the true baseline. Fix by removing the bug class: the
-     compose file is a whole-stack artifact, so install it once per release,
-     back it up once, restore it on failure, and take it out of per-service
-     rollback entirely.
+   - Central CI compose rollback baseline — DONE (2026-08-12). The compose file
+     is a whole-stack artifact, so `pixaeron.yml` now installs it once per
+     release before the service loop, keeps one `release-rollback` backup,
+     restores it in a `failure()` step, discards it on success, and cleans the
+     staged copy in the `always()` step. `deploy-service.sh` no longer touches
+     the compose file at all; its rollback restarts the service with `--no-deps`
+     so a rollback cannot re-resolve dependencies against a mid-release stack.
+     A failed release now leaves the pre-release compose on disk, and rerunning
+     the same commit behaves like a first run.
    - `workflow_dispatch` naming a single service — DONE in the central CI
      (2026-08-11), pending a new pin. The earlier diagnosis — "an empty deploy
      matrix" — was WRONG. `service=notifications` selects one row: notifications
@@ -264,19 +269,15 @@ reference it any more.
      non-subgraph services (that is, notifications alone) skipped its release the
      same way and stayed green. Check whether any notifications-only change on
      main was never actually deployed.
-   - Remaining duplication. Already extracted: `Transaction`,
-     `isUniqueConstraintError` (both services now), `recipientHashFilter`,
-     `matchesRecipientHash`, the SES sender parser and the lease-expiry payload.
-     Left: the cross-service Joi primitives (`booleanValue`, `NODE_ENV`, `PORT`,
-     `DATABASE_URL`), which need a new `libs/config` — not `libs/nestjs`, whose
-     barrel pulls in express and would give a gRPC-only service an HTTP-server
-     dependency. Bundle that move with `normalizeEmail` / `normalizeRecipient`,
-     which are the same function in both services and are a cross-service
-     contract rather than a three-line helper: if they drift, the recipient hash
-     stops matching and suppression silently stops applying. `prisma.service.ts`
-     is byte-identical across both apps but each extends its own generated
-     client, so deduplicating it needs a generic factory — not worth it for two
-     services.
+   - Cross-service duplication — DONE (2026-08-12). `libs/config`
+     (`@pixaeron/config`) now owns the shared Joi primitives (`booleanValue`,
+     `nodeEnvironment`, `port`, `postgresUrl`) and `normalizeEmail`, which both
+     services import; the notifications-side `normalizeRecipient` copy is gone.
+     That function is a cross-service contract: auth normalizes before the wire,
+     notifications before HMAC-ing, and drift would silently break suppression.
+     Deliberately NOT deduplicated: `prisma.service.ts` is byte-identical across
+     both apps but each extends its own generated client, so a generic factory
+     is not worth it for two services.
    - Auth `User` has no `@@map`, so its table is `"User"` while every other
      model maps to snake_case plural. The rename is metadata-only DDL — table,
      `User_pkey`, `User_id_seq`, two unique indexes and one check constraint;
