@@ -1,3 +1,4 @@
+import { normalizeEmail } from '@pixaeron/config';
 import { ConflictException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 
@@ -21,7 +22,6 @@ import {
   EmailVerificationStatus,
   RegistrationResult,
 } from '../models/auth-result.model';
-import { normalizeEmail } from '../helpers/normalize-email';
 import { AuthChallengePolicyService } from '../services/auth-challenge-policy.service';
 import { AuthEmailDeliveryService } from '../email/auth-email-delivery.service';
 

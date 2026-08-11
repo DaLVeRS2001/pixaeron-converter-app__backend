@@ -1,3 +1,4 @@
+import { normalizeEmail } from '@pixaeron/config';
 import {
   SecurityEmailPurpose,
   SendSecurityEmailResult,
@@ -29,7 +30,6 @@ import {
 import { lockRecipientAliases } from './recipient-advisory-lock';
 import {
   matchesRecipientHash,
-  normalizeRecipient,
   recipientHashFilter,
   RecipientHashService,
   type RecipientHash,
@@ -69,7 +69,7 @@ export class SecurityEmailService {
     request: SendSecurityEmailRequest,
     deadlineAt: number,
   ): Promise<SendSecurityEmailResponse> {
-    const recipient = normalizeRecipient(request.recipient);
+    const recipient = normalizeEmail(request.recipient);
     const recipientHash = this.recipientHashService.create(recipient);
     const lookupHashes =
       this.recipientHashService.createLookupHashes(recipient);
