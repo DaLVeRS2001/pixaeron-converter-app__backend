@@ -1,8 +1,7 @@
+import { normalizeEmail } from '@pixaeron/config';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
-
-import { normalizeEmail } from '../helpers/normalize-email';
 
 interface GoogleUserProfile {
   providerAccountId: string;

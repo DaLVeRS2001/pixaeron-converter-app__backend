@@ -1,9 +1,7 @@
+import { normalizeEmail } from '@pixaeron/config';
 import { ConfigService } from '@nestjs/config';
 
-import {
-  normalizeRecipient,
-  RecipientHashService,
-} from './recipient-hash.service';
+import { RecipientHashService } from './recipient-hash.service';
 
 const activeKey = Buffer.alloc(32, 1).toString('base64');
 const previousKey = Buffer.alloc(32, 2).toString('base64');
@@ -22,7 +20,7 @@ describe('RecipientHashService', () => {
   });
 
   it('normalizes only surrounding whitespace and letter case', () => {
-    expect(normalizeRecipient('  User.Name+tag@Example.COM ')).toBe(
+    expect(normalizeEmail('  User.Name+tag@Example.COM ')).toBe(
       'user.name+tag@example.com',
     );
   });

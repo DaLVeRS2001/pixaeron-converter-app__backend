@@ -11,12 +11,14 @@ import {
 import { firstValueFrom } from 'rxjs';
 
 export const NOTIFICATIONS_GRPC_CLIENT = Symbol('NOTIFICATIONS_GRPC_CLIENT');
+export const COMMAND_SECRET_METADATA_KEY = 'x-pixaeron-command-secret';
 
 const DEFAULT_NOTIFICATIONS_GRPC_DEADLINE_MS = 2_000;
 
 @Injectable()
 export class NotificationsEmailClient implements OnModuleInit {
   private readonly deadlineMs: number;
+  private readonly commandSecret: string | undefined;
   private emailService!: NotificationsEmailServiceClient;
 
   constructor(
@@ -29,6 +31,9 @@ export class NotificationsEmailClient implements OnModuleInit {
     );
     this.deadlineMs = Number(
       configuredDeadlineMs ?? DEFAULT_NOTIFICATIONS_GRPC_DEADLINE_MS,
+    );
+    this.commandSecret = configService.get<string>(
+      'NOTIFICATIONS_COMMAND_SECRET',
     );
   }
 
@@ -44,9 +49,13 @@ export class NotificationsEmailClient implements OnModuleInit {
     const options: CallOptions = {
       deadline: new Date(Date.now() + this.deadlineMs),
     };
+    const metadata = new Metadata();
+    if (this.commandSecret) {
+      metadata.add(COMMAND_SECRET_METADATA_KEY, this.commandSecret);
+    }
 
     return firstValueFrom(
-      this.emailService.sendSecurityEmail(request, new Metadata(), options),
+      this.emailService.sendSecurityEmail(request, metadata, options),
     );
   }
 }

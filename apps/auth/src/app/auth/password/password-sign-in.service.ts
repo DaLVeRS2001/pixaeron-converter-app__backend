@@ -1,3 +1,4 @@
+import { normalizeEmail } from '@pixaeron/config';
 import {
   ForbiddenException,
   Injectable,
@@ -14,7 +15,6 @@ import {
 } from '../../session/services/session.service';
 import { UserService } from '../../user/user.service';
 import { LoginInput } from './login.input';
-import { normalizeEmail } from '../helpers/normalize-email';
 import { AuthChallengePolicyService } from '../services/auth-challenge-policy.service';
 import { LoginAttemptService } from './login-attempt.service';
 

@@ -14,6 +14,7 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
+      "@pixaeron/config": ["./libs/config/src/index.ts"],
       "@pixaeron/captcha": ["./libs/captcha/src/index.ts"],
       "@pixaeron/nestjs": ["./libs/nestjs/src/index.ts"],
       "@pixaeron/graphql": ["./libs/graphql/src/index.ts"],

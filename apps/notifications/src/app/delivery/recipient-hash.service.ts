@@ -1,3 +1,4 @@
+import { normalizeEmail } from '@pixaeron/config';
 import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'node:crypto';
@@ -13,10 +14,6 @@ type RecipientHashKey = {
   value: Buffer;
   version: number;
 };
-
-export function normalizeRecipient(recipient: string): string {
-  return recipient.trim().toLowerCase();
-}
 
 type RecipientHashWhere = {
   recipientHash: string;
@@ -107,11 +104,11 @@ export class RecipientHashService implements OnApplicationBootstrap {
   }
 
   create(recipient: string): RecipientHash {
-    return this.hash(normalizeRecipient(recipient), this.activeKey);
+    return this.hash(normalizeEmail(recipient), this.activeKey);
   }
 
   createLookupHashes(recipient: string): RecipientHash[] {
-    const normalizedRecipient = normalizeRecipient(recipient);
+    const normalizedRecipient = normalizeEmail(recipient);
     return this.lookupKeys.map((key) => this.hash(normalizedRecipient, key));
   }
 

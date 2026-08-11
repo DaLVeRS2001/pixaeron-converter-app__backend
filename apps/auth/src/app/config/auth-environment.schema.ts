@@ -1,9 +1,13 @@
+import {
+  booleanValue,
+  nodeEnvironment,
+  port,
+  postgresUrl,
+} from '@pixaeron/config';
 import * as Joi from 'joi';
 
 const integer = (minimum: number, maximum: number) =>
   Joi.number().integer().min(minimum).max(maximum).required().raw();
-
-const booleanValue = Joi.string().valid('true', 'false').required();
 
 const secret = Joi.string()
   .trim()
@@ -83,11 +87,9 @@ const grpcAddress = Joi.string()
   });
 
 export const authEnvironmentSchema = Joi.object({
-  NODE_ENV: Joi.string().valid('development', 'test', 'production').required(),
-  PORT: Joi.number().port().required().raw(),
-  DATABASE_URL: Joi.string()
-    .uri({ scheme: ['postgres', 'postgresql'] })
-    .required(),
+  NODE_ENV: nodeEnvironment,
+  PORT: port,
+  DATABASE_URL: postgresUrl,
   REDIS_URL: Joi.string()
     .uri({ scheme: ['redis', 'rediss'] })
     .required(),
@@ -148,6 +150,7 @@ export const authEnvironmentSchema = Joi.object({
     then: integer(100, 30_000),
     otherwise: Joi.any().optional(),
   }),
+  NOTIFICATIONS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
   EMAIL_ACTION_RESPONSE_BUDGET_MS: Joi.when('EMAIL_DELIVERY_ENABLED', {
     is: 'true',
     then: integer(101, 60_000).greater(

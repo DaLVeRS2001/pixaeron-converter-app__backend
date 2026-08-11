@@ -1,8 +1,12 @@
+import {
+  booleanValue,
+  nodeEnvironment,
+  port,
+  postgresUrl,
+} from '@pixaeron/config';
 import * as Joi from 'joi';
 
 import { parseSenderAddress } from '../delivery/sender-address';
-
-const booleanValue = Joi.string().valid('true', 'false').required();
 const keyVersion = Joi.number().integer().min(1).max(2_147_483_647).raw();
 const emailAddress = Joi.string().email({ tlds: { allow: false } });
 const sqsQueueUrlPattern =
@@ -59,14 +63,13 @@ const grpcHost = Joi.alternatives()
   .required();
 
 export const notificationsEnvironmentSchema = Joi.object({
-  NODE_ENV: Joi.string().valid('development', 'test', 'production').required(),
-  PORT: Joi.number().port().required().raw(),
-  DATABASE_URL: Joi.string()
-    .uri({ scheme: ['postgres', 'postgresql'] })
-    .required(),
+  NODE_ENV: nodeEnvironment,
+  PORT: port,
+  DATABASE_URL: postgresUrl,
 
   NOTIFICATIONS_GRPC_HOST: grpcHost,
-  NOTIFICATIONS_GRPC_PORT: Joi.number().port().required().raw(),
+  NOTIFICATIONS_GRPC_PORT: port,
+  NOTIFICATIONS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
 
   RECIPIENT_HMAC_KEYRING_JSON: recipientHmacKeyring,
   RECIPIENT_HMAC_ACTIVE_KEY_VERSION: keyVersion.required(),

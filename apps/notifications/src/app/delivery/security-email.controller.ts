@@ -5,7 +5,7 @@ import {
   type SendSecurityEmailRequest,
   type SendSecurityEmailResponse,
 } from '@pixaeron/notifications-contract';
-import { Controller } from '@nestjs/common';
+import { Controller, UseGuards } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import {
   status as grpcStatus,
@@ -14,12 +14,14 @@ import {
 } from '@grpc/grpc-js';
 import { isEmail, isUUID } from 'class-validator';
 
+import { CommandAuthenticationGuard } from './command-authentication.guard';
 import {
   EmailCommandConflictError,
   SecurityEmailService,
 } from './security-email.service';
 
 @Controller()
+@UseGuards(CommandAuthenticationGuard)
 @NotificationsEmailServiceControllerMethods()
 export class SecurityEmailController
   implements NotificationsEmailServiceController
