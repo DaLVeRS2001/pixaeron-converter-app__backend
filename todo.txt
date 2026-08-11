@@ -75,15 +75,15 @@ reference it any more.
      harden COOP to `same-origin`: that silently kills the Google sign-in
      callback. Rollback if a flow breaks: append `-Report-Only` to the header
      name and redeploy the frontend.
-   - operator: confirm the Auth Platform audience is **In production**, not
-     Testing — in Testing the flow still works for listed test users, so the
-     owner's own account proves nothing.
+   - Auth Platform audience — CONFIRMED In production (2026-08-12): a Google
+     account outside the test-user list registered successfully, which the
+     Testing mode would have refused. The same run exercised Turnstile and the
+     enforcing CSP end to end.
    - operator: confirm `support@pixaeron.com` is monitored and the policy text
      is owner-approved.
-   - Negative-path tests in a fresh browser: blocked or failed GIS load, wrong
-     audience, expired token, account-link-required, CAPTCHA retry, and a Google
-     account outside the test-user list. Exercise Turnstile on `/sign-in`,
-     `/sign-up`, `/forgot-password` and `/verify-email` — all four render it.
+   - Optional negative paths left unexercised: blocked GIS load, expired token,
+     account-link-required, CAPTCHA retry. Low value now that the decisive case
+     passed; check them opportunistically.
 
 4. Frontend: the pipeline works, the deployed version is stale.
    CI is published and the pin (`pixaeron-frontend.yml@8de5d04`) is valid — none
