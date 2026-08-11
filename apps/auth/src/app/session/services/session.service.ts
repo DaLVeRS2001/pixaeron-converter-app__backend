@@ -75,7 +75,7 @@ export class SessionService {
             Array<{ password: string | null }>
           >`
             SELECT "password"
-            FROM "User"
+            FROM "users"
             WHERE "id" = ${userId}
             FOR UPDATE
           `;

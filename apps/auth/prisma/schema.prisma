@@ -76,6 +76,8 @@ model User {
   authTokens             AuthToken[]
   sessions               Session[]
   sessionEvents          SessionEvent[]
+
+  @@map("users")
 }
 
 // The partial unique index auth_tokens_one_active_per_user_type is maintained by SQL migration.
