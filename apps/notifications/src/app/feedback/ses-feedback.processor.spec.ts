@@ -497,6 +497,64 @@ describe('SesFeedbackProcessor', () => {
     }
   });
 
+  it('converges rotated aliases after nonterminal feedback', async () => {
+    const authoritativeDestination = {
+      status: EmailDestinationStatus.TEMPORARY_FAILURE,
+      reasonCode: 'BOUNCE_TRANSIENT_GENERAL',
+      lastDeliveryId: baseDelivery.id,
+      lastEventId: 'event-id',
+      lastEventAt: new Date('2026-08-08T11:00:00.000Z'),
+      lastEventRank: 40,
+      lastEventFingerprint: 'f'.repeat(64),
+    };
+    const harness = createHarness({ authoritativeDestination });
+    const unblockedAliases = {
+      status: {
+        notIn: [
+          EmailDestinationStatus.SUPPRESSED,
+          EmailDestinationStatus.RECOVERY_PENDING,
+        ],
+      },
+      OR: recipientHashes.map(({ value, keyVersion }) => ({
+        recipientHash: value,
+        recipientHashKeyVersion: keyVersion,
+      })),
+    };
+
+    await harness.processor.process(
+      createFeedbackBody({
+        eventType: 'Delivery',
+        delivery: { timestamp: providerTimestamp },
+      }),
+    );
+
+    expect(
+      harness.transaction.emailDestination.findFirstOrThrow,
+    ).toHaveBeenCalledWith({
+      where: unblockedAliases,
+      orderBy: [
+        { lastEventAt: { sort: 'desc', nulls: 'last' } },
+        { lastEventRank: { sort: 'desc', nulls: 'last' } },
+        { lastEventFingerprint: { sort: 'desc', nulls: 'last' } },
+      ],
+      select: {
+        status: true,
+        reasonCode: true,
+        lastDeliveryId: true,
+        lastEventId: true,
+        lastEventAt: true,
+        lastEventRank: true,
+        lastEventFingerprint: true,
+      },
+    });
+    expect(
+      harness.transaction.emailDestination.updateMany,
+    ).toHaveBeenLastCalledWith({
+      where: unblockedAliases,
+      data: authoritativeDestination,
+    });
+  });
+
   it('lets terminal feedback supersede newer nonterminal state', async () => {
     const harness = createHarness({
       delivery: {
@@ -695,7 +753,8 @@ type HarnessOptions = {
     | 'lastEventAt'
     | 'lastEventRank'
     | 'lastEventFingerprint'
-  >;
+  > &
+    Partial<Pick<EmailDestination, 'status'>>;
 };
 
 function createHarness(options: HarnessOptions = {}) {
@@ -746,6 +805,7 @@ function createHarness(options: HarnessOptions = {}) {
       }),
       findFirstOrThrow: jest.fn().mockResolvedValue(
         options.authoritativeDestination ?? {
+          status: EmailDestinationStatus.ACTIVE,
           reasonCode: 'BOUNCE_PERMANENT_GENERAL',
           lastDeliveryId: delivery.id,
           lastEventId: 'event-id',
