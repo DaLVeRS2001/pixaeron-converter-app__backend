@@ -150,6 +150,7 @@ export const authEnvironmentSchema = Joi.object({
     then: integer(100, 30_000),
     otherwise: Joi.any().optional(),
   }),
+  NOTIFICATIONS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
   EMAIL_ACTION_RESPONSE_BUDGET_MS: Joi.when('EMAIL_DELIVERY_ENABLED', {
     is: 'true',
     then: integer(101, 60_000).greater(

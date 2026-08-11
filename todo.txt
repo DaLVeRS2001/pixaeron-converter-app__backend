@@ -205,17 +205,23 @@ reference it any more.
      holding the correct watermark and the regression becomes permanent. The
      convergence is skipped when the keyring has a single version, so the hot
      path is unchanged today.
-   - The private Auth -> Notifications gRPC channel has no TLS and no
-     authentication, and raw one-time tokens travel over it together with the
-     plaintext recipient address. Note `createInsecure()` appears nowhere in
-     application code — the channel is insecure by omission: neither
-     `main.ts:27-34` nor `auth.module.ts:42-52` passes `credentials`, and Nest
-     falls back to insecure. The controller takes `_metadata` and never reads
-     it. Exposure is contained: `notifications_command` is `internal: true`,
-     port 50052 is unpublished, and the server binds only the network alias.
-     Minimal fix before a second consumer joins: a shared secret in metadata
-     compared with `timingSafeEqual` in a guard — not mTLS, which buys nothing
-     against an attacker who already has container access.
+   - gRPC command-channel authentication — CODE DONE (2026-08-12), enforcement
+     off until the operator enables it. Both sides read the optional
+     `NOTIFICATIONS_COMMAND_SECRET`: the Auth client sends it in the
+     `x-pixaeron-command-secret` metadata key when set, and a `CanActivate`
+     guard on the Notifications controller compares SHA-256 digests with
+     `timingSafeEqual` and rejects with `UNAUTHENTICATED` when set. Unset on
+     either side keeps today's behaviour, so the code deploys with zero risk.
+     To enable: create the same >=32-char secret at
+     `/pixaeron/production/notifications/NOTIFICATIONS_COMMAND_SECRET` and
+     `/pixaeron/production/auth/NOTIFICATIONS_COMMAND_SECRET`, add
+     `NOTIFICATIONS_COMMAND_SECRET` to both services' `secureParameters` in
+     `.github/deploy-services.json`, and release. The ordered release restarts
+     Notifications (enforcing) before Auth (sending), so security emails can
+     fail with UNAUTHENTICATED for the one-to-two-minute window between the two
+     restarts — enable during a quiet hour. TLS/mTLS remains unnecessary while
+     the channel stays inside one Docker host (`notifications_command` is
+     `internal: true`, port 50052 unpublished).
    - Central CI rollback restores the compose file from the wrong baseline for
      the second and later services of an ordered release. Confirmed by reading
      `deploy-service.sh:23,37-40,106,154` against the per-service `scp` inside

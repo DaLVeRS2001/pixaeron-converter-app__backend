@@ -69,6 +69,7 @@ export const notificationsEnvironmentSchema = Joi.object({
 
   NOTIFICATIONS_GRPC_HOST: grpcHost,
   NOTIFICATIONS_GRPC_PORT: port,
+  NOTIFICATIONS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
 
   RECIPIENT_HMAC_KEYRING_JSON: recipientHmacKeyring,
   RECIPIENT_HMAC_ACTIVE_KEY_VERSION: keyVersion.required(),
