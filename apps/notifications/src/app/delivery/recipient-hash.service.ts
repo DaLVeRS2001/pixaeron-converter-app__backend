@@ -23,10 +23,6 @@ type RecipientHashWhere = {
   recipientHashKeyVersion: number;
 };
 
-/**
- * Prisma `OR` clause matching any of a recipient's HMAC aliases (one row per
- * keyring version). Shared by delivery, feedback, recovery, and reconciliation.
- */
 export function recipientHashFilter(
   hashes: RecipientHash[],
 ): RecipientHashWhere[] {
@@ -36,7 +32,6 @@ export function recipientHashFilter(
   }));
 }
 
-/** True when a stored row's hash/version matches one of the lookup aliases. */
 export function matchesRecipientHash(
   record: RecipientHashWhere,
   hashes: RecipientHash[],

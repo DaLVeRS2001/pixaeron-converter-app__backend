@@ -79,8 +79,5 @@ function readDeadline(
   const deadline = call.getDeadline();
   const deadlineAt = deadline instanceof Date ? deadline.getTime() : deadline;
 
-  // A caller may connect without a gRPC deadline (grpc-js reports Infinity).
-  // Fall back to Infinity, never Date.now(): the latter reports an
-  // already-expired budget and makes every deadline-less send fail.
   return Number.isFinite(deadlineAt) ? deadlineAt : Infinity;
 }

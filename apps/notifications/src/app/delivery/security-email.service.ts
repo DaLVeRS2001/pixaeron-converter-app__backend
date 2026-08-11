@@ -227,12 +227,6 @@ export class SecurityEmailService {
     request: SendSecurityEmailRequest,
     recipient: string,
   ): Promise<SendSecurityEmailResponse> {
-    // The caller deadline only bounds how long a duplicate caller polls
-    // (waitForCallerResult) and the gRPC transport. Once a claim is won, the
-    // email is worth sending even if the original caller has stopped waiting,
-    // so the SES attempt uses the provider's own request timeout rather than
-    // the caller's leftover budget. Otherwise a slow claim would strand the
-    // delivery in a terminal FAILED state and silently drop the email.
     const attempted = await this.prisma.emailDelivery.updateMany({
       where: {
         id: delivery.id,
