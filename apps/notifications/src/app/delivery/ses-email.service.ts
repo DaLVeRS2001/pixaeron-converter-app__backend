@@ -22,6 +22,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 import type { SecurityEmailContent } from './email-templates';
+import { parseSenderAddress } from './sender-address';
 
 export const SES_EMAIL_CLIENT = Symbol('SES_EMAIL_CLIENT');
 export const CALLER_DEADLINE_EXCEEDED_CODE = 'CALLER_DEADLINE_EXCEEDED';
@@ -271,10 +272,7 @@ function assertSenderMatchesIdentity(
   fromEmailAddress: string,
   expectedIdentity: string,
 ): void {
-  const match = /^(?:[^<>\r\n]*<([^<>\r\n]+)>|([^<>\r\n]+))$/.exec(
-    fromEmailAddress,
-  );
-  const sender = (match?.[1] ?? match?.[2] ?? '').trim().toLowerCase();
+  const sender = (parseSenderAddress(fromEmailAddress) ?? '').toLowerCase();
   const identity = expectedIdentity.toLowerCase();
   const matchesIdentity = identity.includes('@')
     ? sender === identity

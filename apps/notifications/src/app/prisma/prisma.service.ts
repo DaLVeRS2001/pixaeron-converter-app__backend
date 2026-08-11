@@ -25,10 +25,6 @@ export class PrismaService
     await this.$queryRaw`SELECT 1`;
   }
 
-  // Disconnect on application shutdown, not module destroy: Nest tears the
-  // transport down after onModuleDestroy but before onApplicationShutdown,
-  // so disconnecting here keeps in-flight work served until the server itself
-  // stops accepting it.
   async onApplicationShutdown(): Promise<void> {
     await this.$disconnect();
   }

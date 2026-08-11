@@ -2,9 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 import {
-  EmailCommandResult,
-  EmailDeliveryStatus,
-} from '../../generated/prisma/client';
+  expiredLeaseFilter,
+  expiredLeaseUpdate,
+} from '../delivery/delivery-lease';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -19,19 +19,8 @@ export class EmailSubmissionReconciliationService {
   async expireStaleClaims(): Promise<void> {
     const expiredAt = new Date();
     const expired = await this.prisma.emailDelivery.updateMany({
-      where: {
-        status: EmailDeliveryStatus.PENDING,
-        callerResult: null,
-        leaseExpiresAt: { lte: expiredAt },
-      },
-      data: {
-        status: EmailDeliveryStatus.SUBMISSION_UNKNOWN,
-        callerResult: EmailCommandResult.SUBMISSION_UNKNOWN,
-        callerResultCode: 'SUBMISSION_LEASE_EXPIRED',
-        failureCode: 'SUBMISSION_LEASE_EXPIRED',
-        leaseExpiresAt: null,
-        finalizedAt: expiredAt,
-      },
+      where: expiredLeaseFilter(expiredAt),
+      data: expiredLeaseUpdate(expiredAt),
     });
 
     if (expired.count > 0) {

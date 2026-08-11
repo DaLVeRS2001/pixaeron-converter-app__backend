@@ -2,7 +2,6 @@ import { DynamicModule, Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { RedisModule } from '@nestjs-redis/client';
 
-import { RedisCacheService } from './redis-cache.service';
 import { RedisLockService } from './redis-lock.service';
 import { REDIS_NAMESPACE } from './redis-options';
 
@@ -30,10 +29,9 @@ export class RedisInfrastructureModule {
       ],
       providers: [
         { provide: REDIS_NAMESPACE, useValue: namespace },
-        RedisCacheService,
         RedisLockService,
       ],
-      exports: [RedisCacheService, RedisLockService],
+      exports: [RedisLockService],
     };
   }
 }

@@ -3,9 +3,9 @@ import type { Request } from 'express';
 
 import {
   AuthTokenType,
-  Prisma,
   SessionEventType,
 } from '../../../generated/prisma/client';
+import { isUniqueConstraintError } from '../../prisma/prisma.support';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionAuditService } from '../../session/audit/session-audit.service';
 import { UserService } from '../../user/user.service';
@@ -105,10 +105,7 @@ export class RegistrationService {
         return { user, verificationToken };
       })
       .catch((error: unknown) => {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
+        if (isUniqueConstraintError(error)) {
           throw new ConflictException({
             code: 'EMAIL_ALREADY_REGISTERED',
             message: 'An account with this email already exists',

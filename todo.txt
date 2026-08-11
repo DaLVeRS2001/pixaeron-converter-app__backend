@@ -1,83 +1,293 @@
 # Planned work
 
-1. Production email setup / SES rollout.
-   - The Notifications service, its gRPC contract and the SES feedback consumer
-     are implemented in the repository. The remaining work is owner-operated AWS
-     provisioning and staged enablement.
-   - The full manual checklist lives in `docs/todo.md`; do not duplicate it here.
+Verified against the repositories on 2026-08-11. Items marked "operator" cannot
+be checked from the code and need the AWS / Google / Cloudflare consoles.
 
-2. Run throughput and multi-replica tests for shared rate limits, refresh
-   concurrency, cleanup locks, and Redis failure behavior.
+`docs/todo.md` no longer exists. It was retired on 2026-08-11 into
+`docs/notifications-operations-guide.md` and into this file, so nothing should
+reference it any more.
 
-3. Complete the Google Sign-In production release gates.
-   - Publish the production Google Auth Platform audience only after the
-     homepage, `/privacy`, and `/terms` are public over HTTPS.
-   - Obtain owner/legal/privacy approval for the public policy text and confirm
-     that `support@pixaeron.com` is monitored.
-   - Verify `pixaeron.com` ownership, branding, authorized JavaScript origins,
-     minimal scopes, and matching frontend/backend production client IDs.
-   - Add and test the final static-host CSP/COOP policy with Google Identity
-     Services and Cloudflare Turnstile before enforcing it.
-   - Run fresh-browser negative-path tests for blocked/failed Google SDK load,
-     wrong audience, expired token, account-link-required, CAPTCHA retry, and
-     a non-test Google account.
+1. SES rollout — DONE through Stage C; only the operator tail remains.
+   Live in production: notifications deployed, email delivery on, feedback
+   consumer polling, bounce and complaint suppression proven end to end.
+   Remaining, in order:
+   - DLQ drill. Publish one drill message to the SNS topic
+     `pixaeron-ses-feedback-production-events` (not the legacy
+     `pixaeron-ses-feedback-production`, whose only subscriber is the operator
+     mailbox), watch it fail validation, reach the DLQ after five receives,
+     raise the DLQ alarm, then delete only that message. The age alarm already
+     fired for real on the SES validation notice, so that half is proven.
+   - Public Auth behaviour checks against production.
+   - SES reputation alarms. The metrics did not exist before the first send;
+     they do now.
+   - Release C cleanup: drop the old identity-level bounce/complaint route and
+     its email subscription, delete the old `pixaeron-ses-feedback-production`
+     topic, and remove the dead Auth SSM parameters `AWS_REGION`,
+     `SES_FROM_EMAIL`, `FRONTEND_URL`, `JWT_SECRET`. They are not "rejected by
+     the environment contract" — `app.module.ts:31` validates with
+     `allowUnknown: true`, so they are silently ignored, not refused.
 
-4. Publish the frontend CI and complete the first Cloudflare deployment.
-   - Push the central CI commit before the frontend caller that pins it, then
-     replace the frontend pin with that exact SHA.
-   - Keep public frontend build values as repository variables. Store the
-     Cloudflare account ID as a `production` environment variable and the
-     deployment token only as a protected `production` environment secret.
-     The repository-local deploy job consumes the central verified-build artifact.
-   - Deploy `pixaeron-web`, test its Workers preview URL, bind the production
-     domain, and verify SPA refresh, Google, Turnstile, cookies, and CORS.
+2. Throughput and multi-replica tests — NOT STARTED.
+   No load tooling exists: k6, artillery, autocannon, testcontainers, locust,
+   jmeter and vegeta return zero hits across the workspace.
+   The old note claimed "all 45 spec files are mocked Jest unit tests". That is
+   wrong — real-infrastructure tooling already exists and a concurrency test
+   needs no new dependency:
+   - `apps/auth/.../notifications-email.client.integration.spec.ts` boots a real
+     grpc-js server on a real socket.
+   - `apps/notifications/scripts/postgres-integration.sql` runs against real
+     Postgres through the `db-integration` target.
+   - `apps/auth-e2e` serves Auth and drives it over HTTP.
+   - Central CI already provisions `postgres:18` and `redis:8-alpine` and runs
+     both `db-integration` and `e2e`.
+   The real gap is that concurrency is never exercised: for example
+   `libs/redis/src/lib/redis-lock.service.spec.ts` replaces Redis with
+   `{ set, eval }` mocks, so it asserts argument shape and never atomicity.
+   Highest-value targets, in order:
+   - Recipient-alias convergence under two concurrent transactions through
+     `lockRecipientAliases`, on real Postgres. This is the evidence the
+     convergence fix in item 11 deserves before the first HMAC key rotation.
+   - Refresh-token rotation and family reuse under parallel refresh in
+     `apps/auth-e2e`; `auth-token.service.ts:32` relies on
+     `pg_advisory_xact_lock`.
+   - The shared HTTP rate limit against real Redis, including the 503 fallback
+     in `http-rate-limit.middleware.ts:76-80`, which is untested.
 
-5. Database migrations before production.
-   - Local migration deploy and token/concurrency tests are complete. Before
-     production, take a backup, review the pending Auth migrations, deploy them
-     before the new image, and verify the constraint/index state after rollout.
-   - Notifications owns a separate database and its own migration command; it is
-     never mixed with the Auth schema.
+3. Google Sign-In: remaining production gates.
+   Sign-in works in production, the site is public over HTTPS with `/privacy`
+   and `/terms`, and the client IDs match.
+   - Content-Security-Policy and COOP: DONE in code. `public/_headers` now sets
+     `Cross-Origin-Opener-Policy: same-origin-allow-popups` and a
+     **report-only** policy, and `scripts/check-cloudflare-build.mjs` asserts the
+     parsed structure per directive instead of matching substrings.
+     Remaining: deploy, watch the browser console for a week, then rename
+     `Content-Security-Policy-Report-Only` to `Content-Security-Policy`.
+     Expect exactly one benign violation — Zod's `new Function("")` capability
+     probe, which is caught and falls back to its jitless path. Do NOT add
+     `'unsafe-eval'` because of it, and never harden COOP to `same-origin`:
+     that silently kills the Google sign-in callback.
+   - operator: confirm the Auth Platform audience is **In production**, not
+     Testing — in Testing the flow still works for listed test users, so the
+     owner's own account proves nothing.
+   - operator: confirm `support@pixaeron.com` is monitored and the policy text
+     is owner-approved.
+   - Negative-path tests in a fresh browser: blocked or failed GIS load, wrong
+     audience, expired token, account-link-required, CAPTCHA retry, and a Google
+     account outside the test-user list. Exercise Turnstile on `/sign-in`,
+     `/sign-up`, `/forgot-password` and `/verify-email` — all four render it.
 
-6. Move Auth off the RDS master user onto a dedicated least-privilege role.
-   - Current state: the production database `dbauth` is owned by `dbmasteruser`,
-     and Auth appears to connect as that master user. Confirm by reading the
-     user part of `/pixaeron/production/auth/DATABASE_URL`.
+4. Frontend: the pipeline works, the deployed version is stale.
+   CI is published and the pin (`pixaeron-frontend.yml@8de5d04`) is valid — none
+   of the later central commits touched that file. The first Cloudflare
+   deployment succeeded and the custom domain is bound.
+   The earlier note claimed 17 uncommitted files; that was already stale when it
+   was written. The tree is clean and pushed.
+   - Merge `dev` into `main` and deploy. Local `main` is far behind its remote,
+     so fetch and reset it before merging.
+   - operator: confirm what is actually live — Cloudflare -> Workers & Pages ->
+     `pixaeron-web` -> Deployments records `owner/repo@SHA` per version.
+   - operator: confirm `https://api.pixaeron.com/graphql` terminates on the
+     Gateway rather than the older direct Auth route.
+   - Direct-refresh check on every client route and a `workers.dev` smoke test.
+   - Make `Frontend pipeline / Verify frontend` a required PR check.
+
+5. Database migrations — the "before production" part is DONE.
+   12 migrations are applied: 10 for Auth (through
+   `20260729150000_add_session_refresh_tokens`) and 2 for Notifications, all
+   ancestors of `origin/main` and deployed by `prisma migrate deploy` during the
+   ordered release. What stays is the standing rule, not a task: snapshot the
+   Lightsail database before any release that carries a migration, keep
+   migrations backward-compatible because rollback restores the previous image
+   and never rewrites database history, and verify constraint/index state after
+   rollout.
+
+6. Move Auth off the Lightsail master user onto a dedicated least-privilege role.
+   Confirmed not started: no `pixaeron_auth` role exists anywhere in the
+   repository, and `dbauth` is still owned by `dbmasteruser`.
    - The master user can read and drop every database on the instance, including
      the Notifications database, and can create or drop roles. A compromise of
      Auth therefore compromises the whole instance.
-   - Target: an `pixaeron_auth` login role owning only `dbauth`, mirroring what
+   - Target: a `pixaeron_auth` login role owning only `dbauth`, mirroring what
      Notifications does from the start. Keep the master password for operator
      administration only.
-   - Migration is not zero-downtime-free: create the role, transfer ownership of
-     the schema and all objects in `dbauth`, update `DATABASE_URL` in Parameter
-     Store, then redeploy Auth. Take a snapshot first and rehearse on a restored
-     copy before touching production.
-   - Generate the new password from letters and digits only so it needs no
-     percent-encoding inside `DATABASE_URL`. If a password does contain special
-     characters, encode it with `[uri]::EscapeDataString('<password>')` exactly
-     once; double-encoding turns `%7B` into `%257B` and breaks authentication.
+   - Not zero-downtime-free: create the role, transfer ownership of the schema
+     and every object in `dbauth`, update `DATABASE_URL` in Parameter Store,
+     redeploy Auth. Snapshot first and rehearse on a restored copy.
+   - Generate the password from letters and digits only so it needs no
+     percent-encoding inside `DATABASE_URL`; if it does contain other
+     characters, encode with `[uri]::EscapeDataString('<password>')` exactly
+     once — double-encoding turns `%7B` into `%257B` and breaks authentication.
+   - While in there: `REVOKE CONNECT ON DATABASE dbauth FROM PUBLIC`. Today any
+     role on the instance can connect to `dbauth`; table privileges still block
+     reads, so only catalogue metadata is exposed, but the grant is pointless.
 
-7. Deferred code work (tracked from the code review; none is a launch blocker).
-   - Nonterminal HMAC-alias convergence in the SES feedback state machine.
-     Dormant while `SES_FEEDBACK_CONSUMER_ENABLED=false`; fix before relying on
-     alias state after an HMAC key rotation.
+7. Registration leaks account existence — decision still open.
+   `registration.service.ts:63-68` (and the P2002 race branch at `:112-115`)
+   throw `EMAIL_ALREADY_REGISTERED`, and that code is in the public allowlist in
+   `graphql-error-contract.ts:9`, so both the code and the message go to the
+   client. Every other email flow is privacy-preserving: password reset and
+   resend always return `{ accepted: true }`.
+   Important: **the code itself is the oracle**, so rewriting only the message
+   changes nothing — Option B must also remove the code from `publicErrorCodes`.
+   - Option A (keep): accept the trade-off for the clearer UX and record it as a
+     deliberate decision.
+   - Option B (close): always answer "check your email"; send verification to a
+     new address and "someone tried to register with your address" to an
+     existing one. Cheaper than it looks: only the P2002 branch is spec-covered
+     (`registration.service.spec.ts:152`), the frontend cost is deleting five
+     references to `emailAlreadyRegistered`, and the success path already does
+     the right thing — `useSignUpModel.ts` navigates to `/verify-email` on
+     `accepted`. One backend detail: the existing-account branch creates no row,
+     so the resolver must echo the normalized input address rather than
+     `registration.user.email`.
+   Decide before public launch rather than by default.
+
+8. ACCEPTED BEHAVIOUR, not tasks. Recorded so nobody "fixes" them later.
+
+   (a) Password recovery sends nothing for a Google-only account.
+   `password-recovery.service.ts:56` mails the reset link only
+   `if (user?.password)`; an account created through Google Sign-In has no
+   password, so an audit event is recorded and no mail is sent, while the form
+   still answers "if the account exists, the message is on its way". Confirmed
+   in production on 2026-08-11 — no `email_deliveries` row is created at all.
+   The generic answer is deliberate: a different response would reveal how the
+   account was registered. Owner decision (2026-08-11): keep the backend as is —
+   sending a "you signed up with Google" mail would mean a third purpose in the
+   gRPC contract for little gain.
+   Closed on the frontend instead: the recovery form carries a permanent hint
+   ("Signed up with Google? A reset link will not arrive — use Continue with
+   Google"), rendered unconditionally so it cannot react to the entered address
+   and therefore leaks nothing. Do not make that hint conditional.
+
+   (b) A used reset link still renders the form; the failure appears only after
+   submitting ("this link has already been used"). Single use is enforced in the
+   database — `password-recovery.service.ts:110` checks `consumedAt` before the
+   transaction, `:148` repeats it inside, and `:173-176` consumes through a
+   compare-and-swap on `consumedAt: null` and `expiresAt > now`, so two
+   simultaneous clicks cannot both succeed. Validating the token on page load
+   would be friendlier but would turn the page into a token-validity oracle that
+   answers without hitting the submit rate limit. Owner decision (2026-08-11):
+   keep as is.
+
+9. Verify-email page — DONE (2026-08-11).
+   The header no longer renders pending instructions once the address is
+   confirmed, and an authenticated user whose address is already verified now
+   sees the confirmed state instead of a resend form that silently sends
+   nothing. The state comes from `emailVerified` on the `me` query, which the
+   frontend already selected, so no schema change was needed. The override is
+   gated on the page's own status still being `CHECK_EMAIL`, so a real token
+   outcome always wins, and anonymous visitors are untouched — anything else
+   there would be an enumeration oracle.
+
+10. Error messages now follow a language switch — DONE (2026-08-11).
+   The five auth models store `{ code, action, retryAfter }` and translate on
+   render, so switching language re-renders the visible error.
+   `translateAuthError` split into `resolveAuthError` and `authErrorMessage`,
+   which makes error state assertable without i18n.
+   Closed at the same time: `TOO_MANY_REQUESTS` and `SERVICE_UNAVAILABLE` were
+   produced by `shared/api/errors.ts` but had no message, so a Redis outage
+   rendered "Something went wrong"; `CAPTCHA_INVALID` was aliased to
+   "Complete the CAPTCHA verification", which was misleading; the three
+   attempt-limit codes reached the generic fallback whenever `retryAfter` was
+   absent; and `errors.googleUnavailable` was set as a bare literal with no code.
+   Still open, same root cause, different place: every zod schema in
+   `features/auth/model/schemas.ts` bakes translated strings into resolver
+   output, and `useSignUpModel` writes `t('validation.terms')` into react-hook-
+   form state. Field-level validation errors therefore still do not follow a
+   language switch.
+
+11. Deferred code work.
+   - HMAC-alias convergence — DONE (2026-08-11). The nonterminal path in
+     `ses-feedback-transitions.ts` now converges every non-blocked alias onto
+     the authoritative watermark, as the terminal path already did. Without it,
+     a two-version keyring could leave one alias `TEMPORARY_FAILURE@T10` and
+     another `ACTIVE@T5`; the retention cron then deletes the retired-key row
+     holding the correct watermark and the regression becomes permanent. The
+     convergence is skipped when the keyring has a single version, so the hot
+     path is unchanged today.
+   - The private Auth -> Notifications gRPC channel has no TLS and no
+     authentication, and raw one-time tokens travel over it together with the
+     plaintext recipient address. Note `createInsecure()` appears nowhere in
+     application code — the channel is insecure by omission: neither
+     `main.ts:27-34` nor `auth.module.ts:42-52` passes `credentials`, and Nest
+     falls back to insecure. The controller takes `_metadata` and never reads
+     it. Exposure is contained: `notifications_command` is `internal: true`,
+     port 50052 is unpublished, and the server binds only the network alias.
+     Minimal fix before a second consumer joins: a shared secret in metadata
+     compared with `timingSafeEqual` in a guard — not mTLS, which buys nothing
+     against an attacker who already has container access.
    - Central CI rollback restores the compose file from the wrong baseline for
-     the second and later services of an ordered release. Fix requires a
-     staging VPS to verify.
-   - Add authentication (mTLS or a shared secret in gRPC metadata) to the
-     private Auth -> Notifications channel before a second consumer joins the
-     command network.
-   - Remaining duplication: sender regex, CAS lease-expiry, cross-service Joi
-     primitives, central CI setup blocks, `docs/deploy_examples` forks.
-   - Auth `User` model has no `@@map`, so its table is `"User"` while every other
-     model maps to snake_case plural (`accounts`, `sessions`, `auth_tokens`,
-     `session_events`, `session_refresh_tokens`). Cosmetic only — Prisma quotes
-     the identifier correctly — but hand-written SQL must use `FROM "User"`,
-     because PostgreSQL folds unquoted identifiers to lower case. Fixing it means
-     `@@map("users")` plus a migration that renames the table on the production
-     database, so schedule it on its own with a snapshot; do not bundle it with
-     the Notifications rollout.
+     the second and later services of an ordered release. Confirmed by reading
+     `deploy-service.sh:23,37-40,106,154` against the per-service `scp` inside
+     the deploy loop — no staging VPS is needed to see it. Service #2 backs up
+     service #1's already-installed new compose, and service #1's success path
+     has already deleted the true baseline. Fix by removing the bug class: the
+     compose file is a whole-stack artifact, so install it once per release,
+     back it up once, restore it on failure, and take it out of per-service
+     rollback entirely.
+   - `workflow_dispatch` naming a single service — DONE in the central CI
+     (2026-08-11), pending a new pin. The earlier diagnosis — "an empty deploy
+     matrix" — was WRONG. `service=notifications` selects one row: notifications
+     is in `.github/deploy-services.json`, it has no `schema-check` target so the
+     subgraph guard does not fire, and an unknown name hard-fails an earlier
+     step. The two real paths to a green run that deployed nothing were the
+     unannounced `github.ref == 'refs/heads/main'` job gate and `release_guard`
+     setting `deploy=false` when `git ls-remote` shows main has moved, after
+     which every later step is skipped and the job still reports success.
+     `pixaeron.yml` now writes the selection to the step summary, exposes
+     `released` from `deploy-release`, and ends in a `release-outcome` job that
+     turns a manual release on main which deployed nothing into a red run and
+     explains a verification-only dispatch on any other ref. It is scoped to
+     `workflow_dispatch`, so `pull_request` and push-to-main are untouched.
+     Remaining: publish the central CI SHA and re-pin `ci.yml:28` in the backend.
+   - Remaining duplication. Already extracted: `Transaction`,
+     `isUniqueConstraintError` (both services now), `recipientHashFilter`,
+     `matchesRecipientHash`, the SES sender parser and the lease-expiry payload.
+     Left: the cross-service Joi primitives (`booleanValue`, `NODE_ENV`, `PORT`,
+     `DATABASE_URL`), which need a new `libs/config` — not `libs/nestjs`, whose
+     barrel pulls in express and would give a gRPC-only service an HTTP-server
+     dependency. Bundle that move with `normalizeEmail` / `normalizeRecipient`,
+     which are the same function in both services and are a cross-service
+     contract rather than a three-line helper: if they drift, the recipient hash
+     stops matching and suppression silently stops applying. `prisma.service.ts`
+     is byte-identical across both apps but each extends its own generated
+     client, so deduplicating it needs a generic factory — not worth it for two
+     services.
+   - Auth `User` has no `@@map`, so its table is `"User"` while every other
+     model maps to snake_case plural. The rename is metadata-only DDL — table,
+     `User_pkey`, `User_id_seq`, two unique indexes and one check constraint;
+     the four child foreign keys are already snake_case and follow the table by
+     OID. But it is not backward-compatible: the previous image's
+     `session.service.ts:78` runs `SELECT "password" FROM "User"` in raw SQL and
+     would 500 after the rename, so rollback needs the inverse DDL rather than
+     an image revert. Schedule it alone, with a snapshot.
+   - `.gitattributes` — DONE (2026-08-11) in all three repositories, together
+     with re-encoding `README.md` from UTF-16LE to UTF-8 and a renormalize pass
+     in its own commit. Add that commit to `.git-blame-ignore-revs` if blame
+     noise ever matters.
+
+12. Operational documentation lives outside Git.
+    `.gitignore:39` ignores `docs` entirely, and the frontend has the same bare
+    `docs` ignore. The earlier claim that this risks "the only record of this
+    rollout" was wrong — that record is this file, which is tracked and pushed.
+    What is genuinely unversioned is 21 guides plus 2 plans (~6,100 lines) in the
+    backend and 6 files (~610 lines) in the frontend.
+    A secret scan over `docs/` is clean: no account IDs, access keys, tokens,
+    OAuth client IDs, JWTs, PEM blocks, database endpoints or real host IPs; the
+    ARNs carry placeholder account fields and every address is a role address on
+    the project's own public domain. The one borderline value is the Apollo
+    graph ref, which is already public as `vars.APOLLO_GRAPH_REF`.
+    - Narrow the ignore to scratch paths and commit the guides.
+    - Delete `docs/deploy_examples/` rather than committing it. Both trees are
+      hand-copied forks that have drifted, and the `with-aws-parameter-store`
+      copy still ships the version of `upsert_env_value` whose `key` and `value`
+      leak into the global shell scope — fixed upstream on 2026-08-10. Replace
+      them with a link to the pinned upstream workflow plus a paragraph on the
+      parameter-store-versus-github-envs choice, which is the only thing the two
+      directories actually communicate.
+    - If the repositories are or will be public, add a gitleaks gate at the same
+      time. The docs are clean today, but 6,100 lines of operational prose is
+      exactly where a pasted console output eventually lands.
 
 # Candidate topology (planned, not implemented)
 
@@ -89,7 +299,3 @@ Future EC2 Auto Scaling Group
 ```
 
 Add 2FA
-
-
-remove /pixaeron/production/auth/AWS_REGION
-remove /pixaeron/production/auth/SES_FROM_EMAIL

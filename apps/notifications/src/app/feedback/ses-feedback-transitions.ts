@@ -164,6 +164,53 @@ async function applyDestinationTransition(
       nextStatus,
     );
   }
+
+  await convergeNonterminalAliases(transaction, recipientHashes);
+}
+
+async function convergeNonterminalAliases(
+  transaction: Transaction,
+  recipientHashes: RecipientHash[],
+): Promise<void> {
+  if (recipientHashes.length < 2) return;
+
+  const recipientAliases = recipientHashFilter(recipientHashes);
+  const unblockedAliases = {
+    status: { notIn: BLOCKED_DESTINATION_STATUSES },
+    OR: recipientAliases,
+  };
+
+  const authoritativeDestination =
+    await transaction.emailDestination.findFirstOrThrow({
+      where: unblockedAliases,
+      orderBy: [
+        { lastEventAt: { sort: 'desc', nulls: 'last' } },
+        { lastEventRank: { sort: 'desc', nulls: 'last' } },
+        { lastEventFingerprint: { sort: 'desc', nulls: 'last' } },
+      ],
+      select: {
+        status: true,
+        reasonCode: true,
+        lastDeliveryId: true,
+        lastEventId: true,
+        lastEventAt: true,
+        lastEventRank: true,
+        lastEventFingerprint: true,
+      },
+    });
+
+  await transaction.emailDestination.updateMany({
+    where: unblockedAliases,
+    data: {
+      status: authoritativeDestination.status,
+      reasonCode: authoritativeDestination.reasonCode,
+      lastDeliveryId: authoritativeDestination.lastDeliveryId,
+      lastEventId: authoritativeDestination.lastEventId,
+      lastEventAt: authoritativeDestination.lastEventAt,
+      lastEventRank: authoritativeDestination.lastEventRank,
+      lastEventFingerprint: authoritativeDestination.lastEventFingerprint,
+    },
+  });
 }
 
 async function suppressDestinationAliases(
