@@ -239,7 +239,25 @@ reference it any more.
      turns a manual release on main which deployed nothing into a red run and
      explains a verification-only dispatch on any other ref. It is scoped to
      `workflow_dispatch`, so `pull_request` and push-to-main are untouched.
-     Remaining: publish the central CI SHA and re-pin `ci.yml:28` in the backend.
+
+     That guard immediately caught the real defect, which neither earlier
+     diagnosis had found. A dispatch with `service=notifications` on main showed
+     `has_deployments=true` and a selection of `["notifications"]`, yet
+     `build-images` and `deploy-release` were skipped. Cause: `notifications` is
+     not a GraphOS subgraph, so `selected_subgraphs` is empty,
+     `graphos_check_required` is false and `graphos-check` is skipped — and
+     because neither `build-images` nor `deploy-release` carried a status-check
+     function in its `if`, GitHub's implicitly inserted `success()` propagated
+     that skip transitively down the chain. `verification-gate` did not stop it:
+     its own `always()` rescues only itself, not what depends on it. This is
+     actions/runner#2205, open since 2022.
+     Fixed by prefixing both jobs' conditions with `!cancelled() &&`. Nothing
+     else changes — both jobs already require `verify` and `verification-gate` to
+     be `success` explicitly, so the implicit gate was contributing only the bug.
+     Note the defect was never dispatch-specific: a push to main touching only
+     non-subgraph services (that is, notifications alone) skipped its release the
+     same way and stayed green. Check whether any notifications-only change on
+     main was never actually deployed.
    - Remaining duplication. Already extracted: `Transaction`,
      `isUniqueConstraintError` (both services now), `recipientHashFilter`,
      `matchesRecipientHash`, the SES sender parser and the lease-expiry payload.
