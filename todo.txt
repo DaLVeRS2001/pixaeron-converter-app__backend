@@ -20,12 +20,11 @@ reference it any more.
    - Public Auth behaviour checks against production.
    - SES reputation alarms. The metrics did not exist before the first send;
      they do now.
-   - Release C cleanup: drop the old identity-level bounce/complaint route and
-     its email subscription, delete the old `pixaeron-ses-feedback-production`
-     topic, and remove the dead Auth SSM parameters `AWS_REGION`,
-     `SES_FROM_EMAIL`, `FRONTEND_URL`, `JWT_SECRET`. They are not "rejected by
-     the environment contract" — `app.module.ts:31` validates with
-     `allowUnknown: true`, so they are silently ignored, not refused.
+   - Release C cleanup — DONE (2026-08-12): the legacy
+     `pixaeron-ses-feedback-production` topic and the four dead Auth SSM
+     parameters (`AWS_REGION`, `SES_FROM_EMAIL`, `FRONTEND_URL`, `JWT_SECRET`)
+     are deleted. Deleting `JWT_SECRET` also retires the value whose
+     placeholder-era copy sat in public git history.
 
 2. Throughput and multi-replica tests — DEFERRED by owner decision (2026-08-12)
    until the converter and compressor implementations land; load shape is
@@ -111,25 +110,15 @@ reference it any more.
    and never rewrites database history, and verify constraint/index state after
    rollout.
 
-6. Move Auth off the Lightsail master user onto a dedicated least-privilege role.
-   Confirmed not started: no `pixaeron_auth` role exists anywhere in the
-   repository, and `dbauth` is still owned by `dbmasteruser`.
-   - The master user can read and drop every database on the instance, including
-     the Notifications database, and can create or drop roles. A compromise of
-     Auth therefore compromises the whole instance.
-   - Target: a `pixaeron_auth` login role owning only `dbauth`, mirroring what
-     Notifications does from the start. Keep the master password for operator
-     administration only.
-   - Not zero-downtime-free: create the role, transfer ownership of the schema
-     and every object in `dbauth`, update `DATABASE_URL` in Parameter Store,
-     redeploy Auth. Snapshot first and rehearse on a restored copy.
-   - Generate the password from letters and digits only so it needs no
-     percent-encoding inside `DATABASE_URL`; if it does contain other
-     characters, encode with `[uri]::EscapeDataString('<password>')` exactly
-     once — double-encoding turns `%7B` into `%257B` and breaks authentication.
-   - While in there: `REVOKE CONNECT ON DATABASE dbauth FROM PUBLIC`. Today any
-     role on the instance can connect to `dbauth`; table privileges still block
-     reads, so only catalogue metadata is exposed, but the grant is pointless.
+6. Auth least-privilege database role — DONE (2026-08-12), verified in
+   production by a successful password login. `pixaeron_auth` owns `dbauth`, the
+   schema and every table and sequence; `CONNECT` on `dbauth` is revoked from
+   PUBLIC; `DATABASE_URL` in Parameter Store carries the new role;
+   `dbmasteruser` remains a member of `pixaeron_auth` for pgAdmin
+   administration, its password rotated afterwards so it exists nowhere outside
+   the operator's head. Ownership was transferred with an explicit loop over
+   `public` rather than `REASSIGN OWNED`, which would also have reassigned every
+   other database the master owns. A pre-change snapshot exists.
 
 7. Registration leaks account existence — DECIDED 2026-08-12: keep (Option A).
    `registration.service.ts:63-68` (and the P2002 race branch) throw
