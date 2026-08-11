@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-import { Prisma, SessionEventType } from '../../../generated/prisma/client';
+import { SessionEventType } from '../../../generated/prisma/client';
+import { isUniqueConstraintError } from '../../prisma/prisma.support';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionService } from '../../session/services/session.service';
 import { GoogleLoginInput } from './google-login.input';
@@ -92,10 +93,7 @@ export class GoogleSignInService {
         });
       });
     } catch (error) {
-      if (
-        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-        error.code !== 'P2002'
-      ) {
+      if (!isUniqueConstraintError(error)) {
         throw error;
       }
 
