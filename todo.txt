@@ -20,13 +20,19 @@ reference it any more.
    - Public Auth behaviour checks — covered by days of real production usage:
      password login, Google registration from a non-test account, password
      reset, resend and verify-email have all been exercised live.
-   - SES reputation alarms. The metrics did not exist before the first send;
-     they do now.
-   - Release C cleanup — DONE (2026-08-12): the legacy
-     `pixaeron-ses-feedback-production` topic and the four dead Auth SSM
+   - SES reputation alarms — DONE (2026-08-12). `pixaeron-ses-reputation-bounce`
+     (Reputation.BounceRate >= 0.05) and `pixaeron-ses-reputation-complaint`
+     (Reputation.ComplaintRate >= 0.001), Maximum over 1 hour, missing data
+     ignored so a sparse metric cannot mask a real breach, notifying
+     `pixaeron-production-alarms`. Both sit in Insufficient data until the next
+     reputation datapoint; that is expected, not broken.
+   - Release C cleanup — SSM half DONE (2026-08-12): the four dead Auth
      parameters (`AWS_REGION`, `SES_FROM_EMAIL`, `FRONTEND_URL`, `JWT_SECRET`)
-     are deleted. Deleting `JWT_SECRET` also retires the value whose
-     placeholder-era copy sat in public git history.
+     are deleted, which also retires the value whose placeholder-era copy sat
+     in public git history. The legacy `pixaeron-ses-feedback-production` topic
+     was still present in the SNS topic list during the alarm setup — delete it
+     when convenient after confirming its only subscription is the operator
+     mailbox.
 
 2. Throughput and multi-replica tests — DEFERRED by owner decision (2026-08-12)
    until the converter and compressor implementations land; load shape is
