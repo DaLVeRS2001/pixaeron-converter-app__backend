@@ -11,13 +11,15 @@ reference it any more.
    Live in production: notifications deployed, email delivery on, feedback
    consumer polling, bounce and complaint suppression proven end to end.
    Remaining, in order:
-   - DLQ drill. Publish one drill message to the SNS topic
-     `pixaeron-ses-feedback-production-events` (not the legacy
-     `pixaeron-ses-feedback-production`, whose only subscriber is the operator
-     mailbox), watch it fail validation, reach the DLQ after five receives,
-     raise the DLQ alarm, then delete only that message. The age alarm already
-     fired for real on the SES validation notice, so that half is proven.
-   - Public Auth behaviour checks against production.
+   - DLQ drill — DONE (2026-08-12). A drill message published to the live
+     `-events` topic failed validation five times, moved to
+     `pixaeron-ses-feedback-production-dlq`, raised the
+     `pixaeron-ses-feedback-dlq-visible` alarm and delivered the alert email;
+     the message was then deleted individually. The full poison-message path is
+     proven end to end, including the human notification.
+   - Public Auth behaviour checks — covered by days of real production usage:
+     password login, Google registration from a non-test account, password
+     reset, resend and verify-email have all been exercised live.
    - SES reputation alarms. The metrics did not exist before the first send;
      they do now.
    - Release C cleanup — DONE (2026-08-12): the legacy
