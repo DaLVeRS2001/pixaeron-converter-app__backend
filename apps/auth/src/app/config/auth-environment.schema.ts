@@ -5,21 +5,12 @@ import {
   nodeEnvironment,
   port,
   postgresUrl,
+  secret,
 } from '@pixaeron/config';
 import * as Joi from 'joi';
 
 const integer = (minimum: number, maximum: number) =>
   Joi.number().integer().min(minimum).max(maximum).required().raw();
-
-const secret = Joi.string()
-  .trim()
-  .min(32)
-  .pattern(/^(?!(?:GENERATE|REPLACE)_).+$/)
-  .required()
-  .raw()
-  .messages({
-    'string.pattern.base': '{{#label}} must be replaced with a random secret',
-  });
 
 const encodedKey = Joi.string().base64().raw();
 

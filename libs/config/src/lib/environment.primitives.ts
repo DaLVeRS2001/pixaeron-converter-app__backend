@@ -12,6 +12,16 @@ export const postgresUrl = Joi.string()
   .uri({ scheme: ['postgres', 'postgresql'] })
   .required();
 
+export const secret = Joi.string()
+  .trim()
+  .min(32)
+  .pattern(/^(?!(?:GENERATE|REPLACE)_).+$/)
+  .required()
+  .raw()
+  .messages({
+    'string.pattern.base': '{{#label}} must be replaced with a random secret',
+  });
+
 function isValidGrpcAddress(value: string): boolean {
   try {
     const address = new URL('grpc://' + value);

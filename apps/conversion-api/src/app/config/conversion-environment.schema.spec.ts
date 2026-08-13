@@ -5,7 +5,13 @@ const validEnvironment: Record<string, string> = {
   PORT: '3005',
   DATABASE_URL:
     'postgresql://conversion:conversion@127.0.0.1:5435/pixaeron_conversion?schema=public',
+  REDIS_URL: 'redis://127.0.0.1:6379',
+  IP_HASH_SECRET: 'conversion-ip-hash-secret-32-chars-long',
   CORS_ORIGINS: 'http://localhost:3000',
+  AWS_REGION: 'eu-central-1',
+  AWS_ACCESS_KEY_ID: 'AKIAEXAMPLEEXAMPLE',
+  AWS_SECRET_ACCESS_KEY: 'example-secret-access-key-that-is-40-characters',
+  CONVERSION_S3_BUCKET: 'pixaeron-conversion-dev',
   ENTITLEMENTS_GRPC_URL: '127.0.0.1:50053',
   ENTITLEMENTS_GRPC_DEADLINE_MS: '2000',
   CONVERSION_LARGE_FILE_BYTES: '26214400',

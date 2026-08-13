@@ -28,7 +28,9 @@ import {
 const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 const OUTPUT_RETENTION_MS = 48 * 60 * 60 * 1000;
 
-const PLAN_CODES: Partial<Record<EntitlementPlanCode, ConversionPlanCode>> = {
+export const PLAN_CODES: Partial<
+  Record<EntitlementPlanCode, ConversionPlanCode>
+> = {
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS]:
     ConversionPlanCode.ANONYMOUS,
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_FREE]: ConversionPlanCode.FREE,
@@ -53,8 +55,7 @@ export type AdmissionErrorCode =
   | 'DAILY_QUOTA_EXCEEDED'
   | 'FILE_NOT_MEASURED'
   | 'FILE_TOO_LARGE'
-  | 'IDEMPOTENCY_CONFLICT'
-  | 'NO_FILES_READY';
+  | 'IDEMPOTENCY_CONFLICT';
 
 export class AdmissionError extends Error {
   constructor(readonly code: AdmissionErrorCode) {
@@ -184,6 +185,20 @@ export class AdmissionService {
     }
   }
 
+  async getOwnedBatch(
+    batchId: string,
+    ownership: BatchOwnership,
+  ): Promise<ConversionBatch & { files: ConversionFile[] }> {
+    const batch = await this.prisma.conversionBatch.findUnique({
+      where: { id: batchId },
+      include: { files: { orderBy: { id: 'asc' } } },
+    });
+    if (!batch) throw new AdmissionError('BATCH_NOT_FOUND');
+    this.assertOwnership(batch, ownership, 'BATCH_NOT_FOUND');
+
+    return batch;
+  }
+
   async admitReadyFiles(
     batchId: string,
     ownership: BatchOwnership,
@@ -218,10 +233,8 @@ export class AdmissionService {
         const current = await transaction.conversionBatch.findUniqueOrThrow({
           where: { id: batch.id },
         });
-        if (current.status === ConversionBatchStatus.QUEUED) {
-          return { batch: current, admittedFiles: 0 };
-        }
-        throw new AdmissionError('NO_FILES_READY');
+
+        return { batch: current, admittedFiles: 0 };
       }
 
       for (const file of claimed) {
@@ -288,6 +301,17 @@ export class AdmissionService {
         admittedFiles: claimed.length,
       };
     });
+  }
+
+  async remainingToday(subject: string, dailyFiles: number): Promise<number> {
+    const rows = await this.prisma.$queryRaw<Array<{ admitted_files: number }>>`
+      SELECT "admitted_files"
+      FROM "daily_usage"
+      WHERE "subject" = ${subject}
+        AND "usage_date" = (now() AT TIME ZONE 'utc')::date
+    `;
+
+    return Math.max(0, dailyFiles - (rows[0]?.admitted_files ?? 0));
   }
 
   private async reserveDailyQuota(

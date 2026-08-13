@@ -1,0 +1,186 @@
+# GENERATED FILE. DO NOT EDIT MANUALLY.
+# Source of truth: NestJS code-first resolvers and models in apps/conversion-api.
+# Contract: Apollo Federation 2 subgraph SDL.
+
+schema
+  @link(url: "https://specs.apollo.dev/link/v1.0")
+{
+  query: Query
+  mutation: Mutation
+}
+
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.12", import: ["@authenticated", "@cacheTag", "@composeDirective", "@context", "@cost", "@extends", "@external", "@fromContext", "@inaccessible", "@interfaceObject", "@key", "@listSize", "@override", "@policy", "@provides", "@requires", "@requiresScopes", "@shareable", "@tag"])
+
+directive @link(url: String, as: String, for: link__Purpose, import: [link__Import]) repeatable on SCHEMA
+
+directive @key(fields: federation__FieldSet!, resolvable: Boolean = true) repeatable on OBJECT | INTERFACE
+
+directive @requires(fields: federation__FieldSet!) on FIELD_DEFINITION
+
+directive @provides(fields: federation__FieldSet!) on FIELD_DEFINITION
+
+directive @external(reason: String) on OBJECT | FIELD_DEFINITION
+
+directive @tag(name: String!) repeatable on FIELD_DEFINITION | OBJECT | INTERFACE | UNION | ARGUMENT_DEFINITION | SCALAR | ENUM | ENUM_VALUE | INPUT_OBJECT | INPUT_FIELD_DEFINITION | SCHEMA
+
+directive @extends on OBJECT | INTERFACE
+
+directive @shareable repeatable on OBJECT | FIELD_DEFINITION
+
+directive @inaccessible on FIELD_DEFINITION | OBJECT | INTERFACE | UNION | ARGUMENT_DEFINITION | SCALAR | ENUM | ENUM_VALUE | INPUT_OBJECT | INPUT_FIELD_DEFINITION
+
+directive @override(from: String!, label: String) on FIELD_DEFINITION
+
+directive @composeDirective(name: String) repeatable on SCHEMA
+
+directive @interfaceObject on OBJECT
+
+directive @authenticated on FIELD_DEFINITION | OBJECT | INTERFACE | SCALAR | ENUM
+
+directive @requiresScopes(scopes: [[federation__Scope!]!]!) on FIELD_DEFINITION | OBJECT | INTERFACE | SCALAR | ENUM
+
+directive @policy(policies: [[federation__Policy!]!]!) on FIELD_DEFINITION | OBJECT | INTERFACE | SCALAR | ENUM
+
+directive @context(name: String!) repeatable on INTERFACE | OBJECT | UNION
+
+directive @fromContext(field: federation__ContextFieldValue) on ARGUMENT_DEFINITION
+
+directive @cost(weight: Int!) on ARGUMENT_DEFINITION | ENUM | FIELD_DEFINITION | INPUT_FIELD_DEFINITION | OBJECT | SCALAR
+
+directive @listSize(assumedSize: Int, slicingArguments: [String!], sizedFields: [String!], requireOneSlicingArgument: Boolean = true) on FIELD_DEFINITION
+
+directive @cacheTag(format: String!) repeatable on OBJECT | FIELD_DEFINITION
+
+type ConversionUploadField {
+  name: String!
+  value: String!
+}
+
+type ConversionUploadTarget {
+  url: String!
+  fields: [ConversionUploadField!]!
+}
+
+type ConversionFile {
+  id: ID!
+  status: ConversionFileStatus!
+  inputBytes: Int
+  resultKind: ConversionResultKind
+  upload: ConversionUploadTarget
+}
+
+enum ConversionFileStatus {
+  UPLOADING
+  READY
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum ConversionResultKind {
+  SAVED
+  NO_SAVINGS
+  SANITIZED_LARGER
+}
+
+type ConversionBatch {
+  id: ID!
+  status: ConversionBatchStatus!
+  fileCount: Int!
+  expiresAt: DateTime!
+  batchToken: String
+  files: [ConversionFile!]!
+}
+
+enum ConversionBatchStatus {
+  UPLOADING
+  QUEUED
+  PROCESSING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type CompleteConversionUploadsPayload {
+  batch: ConversionBatch!
+  admittedFiles: Int!
+  verifiedFiles: Int!
+  missingFiles: Int!
+}
+
+type ConversionEntitlement {
+  planCode: ConversionPlanCode!
+  maxBatchFiles: Int!
+  maxFileBytes: Int!
+  dailyFiles: Int
+  remainingToday: Int
+  maxConcurrentFiles: Int!
+}
+
+enum ConversionPlanCode {
+  ANONYMOUS
+  FREE
+  LIGHT
+  PRO
+}
+
+type Query {
+  conversionBatch(id: ID!, batchToken: String): ConversionBatch!
+  conversionEntitlement: ConversionEntitlement!
+  _service: _Service!
+}
+
+type Mutation {
+  createConversionBatch(input: CreateConversionBatchInput!): ConversionBatch!
+  completeConversionUploads(input: CompleteConversionUploadsInput!): CompleteConversionUploadsPayload!
+}
+
+input CreateConversionBatchInput {
+  fileCount: Int!
+  idempotencyKey: String!
+  batchToken: String
+}
+
+input CompleteConversionUploadsInput {
+  batchId: ID!
+  batchToken: String
+}
+
+enum link__Purpose {
+  """
+  `SECURITY` features provide metadata necessary to securely resolve fields.
+  """
+  SECURITY
+
+  """
+  `EXECUTION` features provide metadata necessary for operation execution.
+  """
+  EXECUTION
+}
+
+scalar link__Import
+
+scalar federation__FieldSet
+
+scalar federation__Scope
+
+scalar federation__Policy
+
+scalar federation__ContextFieldValue
+
+scalar _Any
+
+type _Service {
+  sdl: String
+}
