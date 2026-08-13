@@ -22,15 +22,7 @@ the guides under docs/, not here.
    - The shared HTTP rate limit against real Redis, including the 503 fallback
      in `http-rate-limit.middleware.ts`, which is untested.
 
-3. Enable the gRPC command-channel secret — IN PROGRESS (2026-08-12). The code
-   ships enforcement-off and the deploy manifest now lists
-   `NOTIFICATIONS_COMMAND_SECRET` for both services, so what remains is
-   operator-only: create the same >=32-char SecureString at both parameter
-   paths, THEN merge and release in a quiet hour. Order matters — once the
-   manifest entry reaches `main`, every release fails until both parameters
-   exist. Procedure and traps: docs/security-guide.md section 17.
-
-4. Load tests - deferred by owner decision until the converter and compressor
+3. Load tests - deferred by owner decision until the converter and compressor
    implementations land; load shape is unknowable before the heavy endpoints
    exist.
 
