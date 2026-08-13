@@ -1,0 +1,124 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ConversionPlanCode {
+  ANONYMOUS
+  FREE
+  LIGHT
+  PRO
+}
+
+enum ConversionBatchStatus {
+  UPLOADING
+  QUEUED
+  PROCESSING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum ConversionFileStatus {
+  UPLOADING
+  READY
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum ConversionResultKind {
+  SAVED
+  NO_SAVINGS
+  SANITIZED_LARGER
+}
+
+enum OutboxEventStatus {
+  PENDING
+  DELIVERED
+}
+
+model ConversionBatch {
+  id             String                @id @default(uuid())
+  subject        String
+  batchTokenHash String?               @map("batch_token_hash")
+  idempotencyKey String                @map("idempotency_key")
+  planCode       ConversionPlanCode    @map("plan_code")
+  planRevision   Int                   @map("plan_revision")
+  status         ConversionBatchStatus @default(UPLOADING)
+  fileCount      Int                   @map("file_count")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  expiresAt      DateTime              @map("expires_at")
+
+  files ConversionFile[]
+
+  @@unique([subject, idempotencyKey])
+  @@index([subject, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("conversion_batches")
+}
+
+model ConversionFile {
+  id              String                @id @default(uuid())
+  batchId         String                @map("batch_id")
+  status          ConversionFileStatus  @default(UPLOADING)
+  inputObjectKey  String                @unique @map("input_object_key")
+  inputEtag       String?               @map("input_etag")
+  outputObjectKey String?               @unique @map("output_object_key")
+  inputFormat     String?               @map("input_format")
+  outputFormat    String?               @map("output_format")
+  inputBytes      BigInt?               @map("input_bytes")
+  outputBytes     BigInt?               @map("output_bytes")
+  outputChecksum  String?               @map("output_checksum")
+  resultKind      ConversionResultKind? @map("result_kind")
+  width           Int?
+  height          Int?
+  frameCount      Int?                  @map("frame_count")
+  attempt         Int                   @default(0)
+  failureCode     String?               @map("failure_code")
+  startedAt       DateTime?             @map("started_at")
+  completedAt     DateTime?             @map("completed_at")
+  expiresAt       DateTime              @map("expires_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  batch ConversionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, createdAt])
+  @@index([status, createdAt])
+  @@index([expiresAt])
+  @@map("conversion_files")
+}
+
+model DailyUsage {
+  subject       String
+  usageDate     DateTime @map("usage_date") @db.Date
+  admittedFiles Int      @map("admitted_files")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@id([subject, usageDate])
+  @@map("daily_usage")
+}
+
+model OutboxEvent {
+  id          String            @id @default(uuid())
+  queue       String
+  payload     Json
+  status      OutboxEventStatus @default(PENDING)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  deliveredAt DateTime?         @map("delivered_at")
+
+  @@index([status, createdAt])
+  @@map("outbox_events")
+}

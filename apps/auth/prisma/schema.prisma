@@ -9,6 +9,7 @@ datasource db {
 }
 
 enum PlanCode {
+  ANONYMOUS
   FREE
   LIGHT
   PRO
@@ -78,6 +79,24 @@ model User {
   sessionEvents          SessionEvent[]
 
   @@map("users")
+}
+
+// The users_plan_code_not_anonymous check is maintained by SQL migration.
+model Plan {
+  code               PlanCode
+  revision           Int
+  effectiveFrom      DateTime @default(now()) @map("effective_from")
+  priceCentsMonthly  Int?     @map("price_cents_monthly")
+  maxBatchFiles      Int      @map("max_batch_files")
+  maxFileBytes       BigInt   @map("max_file_bytes")
+  dailyFiles         Int?     @map("daily_files")
+  maxConcurrentFiles Int      @map("max_concurrent_files")
+  queueTier          Int      @map("queue_tier")
+  minStartDelayMs    Int      @map("min_start_delay_ms")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@id([code, revision])
+  @@map("plans")
 }
 
 // The partial unique index auth_tokens_one_active_per_user_type is maintained by SQL migration.

@@ -1,0 +1,44 @@
+{
+  "name": "entitlements-contract",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/entitlements-contract/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "contracts-generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "buf generate --template buf.gen.yaml",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "contracts-check": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/proto/**/*.proto",
+        "{projectRoot}/buf.yaml",
+        "{projectRoot}/buf.gen.yaml",
+        "{projectRoot}/scripts/check-generated.mjs",
+        "{projectRoot}/src/generated/**/*.ts",
+        "{workspaceRoot}/package-lock.json"
+      ],
+      "options": {
+        "command": "node scripts/check-generated.mjs",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "contracts-breaking": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node scripts/check-breaking.mjs",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "build": {
+      "dependsOn": ["contracts-check"],
+      "executor": "nx:noop"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+version: v2
+clean: true
+plugins:
+  - local: protoc-gen-ts_proto
+    out: src/generated
+    opt:
+      - nestJs=true
+      - exportCommonSymbols=false
+      - addGrpcMetadata=true
+      - addNestjsRestParameter=true
+      - annotateFilesWithVersion=false
+inputs:
+  - directory: proto

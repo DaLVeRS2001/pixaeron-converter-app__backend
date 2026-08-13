@@ -1,26 +1,21 @@
 {
-  "name": "auth",
+  "name": "conversion-api",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/auth/src",
+  "sourceRoot": "apps/conversion-api/src",
   "projectType": "application",
   "tags": [],
   "targets": {
     "build": {
-      "dependsOn": ["schema-check", "^build"],
+      "dependsOn": ["prisma-generate", "^build"],
       "executor": "nx:run-commands",
       "options": {
         "command": "webpack-cli build",
         "env": {
           "NODE_ENV": "production"
         },
-        "cwd": "apps/auth",
+        "cwd": "apps/conversion-api",
         "assets": [
-          "apps/auth/src/assets",
-          {
-            "input": "libs/notifications-contract/proto",
-            "glob": "**/*.proto",
-            "output": "proto"
-          },
+          "apps/conversion-api/src/assets",
           {
             "input": "libs/entitlements-contract/proto",
             "glob": "**/*.proto",
@@ -41,8 +36,8 @@
       "cache": true,
       "executor": "@nx/js:prune-lockfile",
       "outputs": [
-        "{workspaceRoot}/dist/apps/auth/package.json",
-        "{workspaceRoot}/dist/apps/auth/package-lock.json"
+        "{workspaceRoot}/dist/apps/conversion-api/package.json",
+        "{workspaceRoot}/dist/apps/conversion-api/package-lock.json"
       ],
       "options": {
         "buildTarget": "build"
@@ -51,7 +46,7 @@
     "copy-workspace-modules": {
       "dependsOn": ["build"],
       "cache": true,
-      "outputs": ["{workspaceRoot}/dist/apps/auth/workspace_modules"],
+      "outputs": ["{workspaceRoot}/dist/apps/conversion-api/workspace_modules"],
       "executor": "@nx/js:copy-workspace-modules",
       "options": {
         "buildTarget": "build"
@@ -67,26 +62,16 @@
       "defaultConfiguration": "development",
       "dependsOn": ["build"],
       "options": {
-        "buildTarget": "auth:build",
+        "buildTarget": "conversion-api:build",
         "runBuildTargetDependencies": false
       },
       "configurations": {
         "development": {
-          "buildTarget": "auth:build:development"
+          "buildTarget": "conversion-api:build:development"
         },
         "production": {
-          "buildTarget": "auth:build:production"
+          "buildTarget": "conversion-api:build:production"
         }
-      }
-    },
-    "serve-e2e": {
-      "continuous": true,
-      "executor": "@nx/js:node",
-      "options": {
-        "buildTarget": "auth:build",
-        "inspect": false,
-        "runBuildTargetDependencies": false,
-        "watch": false
       }
     },
     "test": {
@@ -132,21 +117,13 @@
         "cwd": "{projectRoot}"
       }
     },
-    "schema-export": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "ts-node --transpile-only --project apps/auth/tsconfig.app.json -r tsconfig-paths/register apps/auth/scripts/export-schema.ts",
-        "cwd": "{workspaceRoot}"
-      },
-      "dependsOn": ["prisma-generate"]
-    },
     "db-integration": {
       "executor": "nx:run-commands",
       "dependsOn": ["prisma-generate"],
       "options": {
         "commands": [
-          "prisma migrate deploy --config apps/auth/prisma.config.ts",
-          "jest --config apps/auth/jest.integration.config.cts --runInBand"
+          "prisma migrate deploy --config apps/conversion-api/prisma.config.ts",
+          "jest --config apps/conversion-api/jest.integration.config.cts --runInBand"
         ],
         "parallel": false,
         "cwd": "{workspaceRoot}"
@@ -154,26 +131,10 @@
       "configurations": {
         "local": {
           "env": {
-            "DATABASE_URL": "postgresql://postgres:postgres@127.0.0.1:5433/pixaeron_auth?schema=public"
+            "DATABASE_URL": "postgresql://conversion:conversion@127.0.0.1:5435/pixaeron_conversion?schema=public"
           }
         }
       }
-    },
-    "schema-check": {
-      "executor": "nx:run-commands",
-      "cache": true,
-      "inputs": [
-        "{projectRoot}/src/**/*.ts",
-        "{workspaceRoot}/libs/graphql/src/**/*.ts",
-        "{projectRoot}/scripts/export-schema.ts",
-        "{projectRoot}/schema.graphql",
-        "{workspaceRoot}/package-lock.json"
-      ],
-      "options": {
-        "command": "ts-node --transpile-only --project apps/auth/tsconfig.app.json -r tsconfig-paths/register apps/auth/scripts/export-schema.ts --check",
-        "cwd": "{workspaceRoot}"
-      },
-      "dependsOn": ["prisma-generate"]
     }
   }
 }

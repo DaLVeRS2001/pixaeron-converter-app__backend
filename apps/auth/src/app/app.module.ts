@@ -13,6 +13,7 @@ import { RedisInfrastructureModule } from '@pixaeron/redis';
 
 import { AuthModule } from './auth/auth.module';
 import { authEnvironmentSchema } from './config/auth-environment.schema';
+import { EntitlementsModule } from './entitlements/entitlements.module';
 import { formatAuthGraphQLError } from './graphql-error-contract';
 import { HealthController } from './health.controller';
 import { PrismaModule } from './prisma/prisma.module';
@@ -51,6 +52,7 @@ import {
       context: (data: HttpContext) => data,
     }),
     AuthModule,
+    EntitlementsModule,
   ],
   controllers: [HealthController],
 })
