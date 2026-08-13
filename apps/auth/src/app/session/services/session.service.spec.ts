@@ -267,6 +267,9 @@ describe('SessionService', () => {
       true,
     );
     expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
+    expect(
+      prisma.sessionRefreshToken.findUnique.mock.invocationCallOrder[0],
+    ).toBeLessThan(prisma.session.findUnique.mock.invocationCallOrder[0]);
   });
 
   it('does not clear winner cookies when session rotation loses CAS', async () => {
@@ -309,6 +312,32 @@ describe('SessionService', () => {
 
   it('allows a short grace window only for the immediate previous token', async () => {
     const consumedAt = new Date(Date.now() - 1_000);
+    prisma.session.findUnique.mockResolvedValue({
+      ...activeSession,
+      rotatedAt: consumedAt,
+    });
+    prisma.sessionRefreshToken.findUnique.mockResolvedValue({
+      ...activeRefreshToken,
+      consumedAt,
+    });
+
+    await expect(service.refreshSession(request, response)).rejects.toThrow(
+      UnauthorizedException,
+    );
+
+    expect(audit.recordRefreshFailed).toHaveBeenCalledWith(
+      activeSession.id,
+      activeSession.userId,
+      request,
+      'concurrent_refresh_rotation',
+    );
+    expect(prisma.session.updateMany).not.toHaveBeenCalled();
+    expect(audit.recordRefreshReuseDetected).not.toHaveBeenCalled();
+    expect(cookies.clearAuthCookies).not.toHaveBeenCalled();
+  });
+
+  it('keeps the grace window when the previous token was consumed just ahead of this clock', async () => {
+    const consumedAt = new Date(Date.now() + 1_000);
     prisma.session.findUnique.mockResolvedValue({
       ...activeSession,
       rotatedAt: consumedAt,
