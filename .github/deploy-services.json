@@ -11,7 +11,8 @@
       "DATABASE_URL",
       "RECIPIENT_HMAC_KEYRING_JSON",
       "AWS_ACCESS_KEY_ID",
-      "AWS_SECRET_ACCESS_KEY"
+      "AWS_SECRET_ACCESS_KEY",
+      "NOTIFICATIONS_COMMAND_SECRET"
     ],
     "runtimeEnvFileEnv": "NOTIFICATIONS_RUNTIME_ENV_FILE",
     "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/notifications/prisma.config.ts"
@@ -28,7 +29,8 @@
       "DATABASE_URL",
       "JWT_PRIVATE_KEY_BASE64",
       "IP_HASH_SECRET",
-      "CAPTCHA_SECRET_KEY"
+      "CAPTCHA_SECRET_KEY",
+      "NOTIFICATIONS_COMMAND_SECRET"
     ],
     "runtimeEnvFileEnv": "AUTH_RUNTIME_ENV_FILE",
     "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/auth/prisma.config.ts"
