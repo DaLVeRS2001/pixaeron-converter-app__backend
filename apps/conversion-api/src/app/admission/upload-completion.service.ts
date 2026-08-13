@@ -5,6 +5,7 @@ import {
   ConversionFileStatus,
   type ConversionBatch,
 } from '../../generated/prisma/client';
+import { OutboxPublisherService } from '../outbox/outbox-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InputObjectStorageService } from '../storage/input-object-storage.service';
 import {
@@ -24,6 +25,7 @@ export class UploadCompletionService {
     private readonly prisma: PrismaService,
     private readonly storage: InputObjectStorageService,
     private readonly admission: AdmissionService,
+    private readonly outboxPublisher: OutboxPublisherService,
   ) {}
 
   async completeUploads(
@@ -59,6 +61,7 @@ export class UploadCompletionService {
       ownership,
       snapshot,
     );
+    if (result.admittedFiles > 0) void this.outboxPublisher.drain();
 
     return {
       ...result,

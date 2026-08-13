@@ -1,6 +1,7 @@
 import { ApolloServerPluginInlineTraceDisabled } from '@apollo/server/plugin/disabled';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import {
   ApolloFederationDriver,
   ApolloFederationDriverConfig,
@@ -30,6 +31,7 @@ import { PrismaModule } from './prisma/prisma.module';
         allowUnknown: true,
       },
     }),
+    ScheduleModule.forRoot(),
     RedisInfrastructureModule.forRoot('conversion'),
     RateLimitModule.forRoot({
       namespace: 'conversion',
