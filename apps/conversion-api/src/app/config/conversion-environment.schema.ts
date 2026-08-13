@@ -19,5 +19,10 @@ export const conversionEnvironmentSchema = Joi.object({
     .max(30_000)
     .required()
     .raw(),
+  CONVERSION_LARGE_FILE_BYTES: Joi.number()
+    .integer()
+    .min(1_048_576)
+    .required()
+    .raw(),
   ENTITLEMENTS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
 });

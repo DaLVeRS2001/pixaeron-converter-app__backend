@@ -4,6 +4,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ENTITLEMENTS_GRPC_LOADER } from '@pixaeron/entitlements-contract';
 import { join } from 'node:path';
 
+import { AdmissionService } from './admission/admission.service';
 import { conversionEnvironmentSchema } from './config/conversion-environment.schema';
 import {
   ENTITLEMENTS_GRPC_CLIENT,
@@ -49,6 +50,6 @@ const entitlementsProtoPath = join(
     PrismaModule,
   ],
   controllers: [HealthController],
-  providers: [EntitlementsClient],
+  providers: [AdmissionService, EntitlementsClient],
 })
 export class AppModule {}
