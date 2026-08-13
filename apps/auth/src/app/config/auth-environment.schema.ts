@@ -151,6 +151,9 @@ export const authEnvironmentSchema = Joi.object({
     otherwise: Joi.any().optional(),
   }),
   NOTIFICATIONS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
+  ENTITLEMENTS_GRPC_HOST: Joi.string().hostname().optional(),
+  ENTITLEMENTS_GRPC_PORT: Joi.number().port().optional().raw(),
+  ENTITLEMENTS_COMMAND_SECRET: Joi.string().min(32).optional().raw(),
   EMAIL_ACTION_RESPONSE_BUDGET_MS: Joi.when('EMAIL_DELIVERY_ENABLED', {
     is: 'true',
     then: integer(101, 60_000).greater(
@@ -158,4 +161,4 @@ export const authEnvironmentSchema = Joi.object({
     ),
     otherwise: Joi.any().optional(),
   }),
-});
+}).and('ENTITLEMENTS_GRPC_HOST', 'ENTITLEMENTS_GRPC_PORT');

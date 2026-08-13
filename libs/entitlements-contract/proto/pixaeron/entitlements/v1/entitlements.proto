@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package pixaeron.entitlements.v1;
+
+service EntitlementsService {
+  rpc GetEntitlement(GetEntitlementRequest) returns (GetEntitlementResponse);
+}
+
+enum EntitlementPlanCode {
+  ENTITLEMENT_PLAN_CODE_UNSPECIFIED = 0;
+  ENTITLEMENT_PLAN_CODE_ANONYMOUS = 1;
+  ENTITLEMENT_PLAN_CODE_FREE = 2;
+  ENTITLEMENT_PLAN_CODE_LIGHT = 3;
+  ENTITLEMENT_PLAN_CODE_PRO = 4;
+}
+
+message GetEntitlementRequest {
+  oneof selector {
+    string subject = 1;
+    EntitlementPlanCode plan_code = 2;
+  }
+}
+
+message GetEntitlementResponse {
+  EntitlementSnapshot snapshot = 1;
+}
+
+message EntitlementSnapshot {
+  EntitlementPlanCode plan_code = 1;
+  uint32 revision = 2;
+  int64 effective_from_epoch_ms = 3;
+  uint32 max_batch_files = 4;
+  uint64 max_file_bytes = 5;
+  optional uint32 daily_files = 6;
+  uint32 max_concurrent_files = 7;
+  uint32 queue_tier = 8;
+  uint32 min_start_delay_ms = 9;
+}

@@ -21,6 +21,9 @@
       "@pixaeron/prisma": ["./libs/prisma/src/index.ts"],
       "@pixaeron/rate-limit": ["./libs/rate-limit/src/index.ts"],
       "@pixaeron/redis": ["./libs/redis/src/index.ts"],
+      "@pixaeron/entitlements-contract": [
+        "./libs/entitlements-contract/src/index.ts"
+      ],
       "@pixaeron/notifications-contract": [
         "./libs/notifications-contract/src/index.ts"
       ]

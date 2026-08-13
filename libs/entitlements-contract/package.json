@@ -1,0 +1,12 @@
+{
+  "name": "@pixaeron/entitlements-contract",
+  "version": "0.0.0",
+  "dependencies": {
+    "tslib": "2.8.1"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "11.x",
+    "@nestjs/microservices": "11.x",
+    "rxjs": "7.x"
+  }
+}

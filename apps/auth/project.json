@@ -20,6 +20,11 @@
             "input": "libs/notifications-contract/proto",
             "glob": "**/*.proto",
             "output": "proto"
+          },
+          {
+            "input": "libs/entitlements-contract/proto",
+            "glob": "**/*.proto",
+            "output": "proto"
           }
         ]
       },
