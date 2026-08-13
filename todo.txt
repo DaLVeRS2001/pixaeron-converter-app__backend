@@ -1,11 +1,8 @@
 # Planned work
 
-Verified against the repositories on 2026-08-13. Completed work is recorded in
-the guides under docs/, not here.
-
-1. Load tests - deferred by owner decision until the converter and compressor
-   implementations land; load shape is unknowable before the heavy endpoints
-   exist.
+Load tests - deferred by owner decision until the converter and compressor
+implementations land; load shape is unknowable before the heavy endpoints
+exist.
 
 # Candidate topology (planned, not implemented)
 
