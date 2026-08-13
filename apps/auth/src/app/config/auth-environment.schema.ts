@@ -1,5 +1,7 @@
 import {
   booleanValue,
+  corsOrigins,
+  grpcAddress,
   nodeEnvironment,
   port,
   postgresUrl,
@@ -20,71 +22,6 @@ const secret = Joi.string()
   });
 
 const encodedKey = Joi.string().base64().raw();
-
-const corsOrigins = Joi.string()
-  .trim()
-  .min(1)
-  .required()
-  .custom((value: string, helpers) => {
-    const origins = value
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean);
-
-    if (origins.length === 0) return helpers.error('cors.empty');
-
-    for (const origin of origins) {
-      if (origin === '*') return helpers.error('cors.wildcard');
-
-      try {
-        const url = new URL(origin);
-        if (
-          !['http:', 'https:'].includes(url.protocol) ||
-          url.origin !== origin
-        ) {
-          return helpers.error('cors.origin');
-        }
-      } catch {
-        return helpers.error('cors.origin');
-      }
-    }
-
-    return value;
-  }, 'CORS origins')
-  .messages({
-    'cors.empty': '{{#label}} must contain at least one origin',
-    'cors.wildcard': '{{#label}} cannot contain "*" when credentials are used',
-    'cors.origin': '{{#label}} must contain only HTTP(S) origins without paths',
-  });
-
-function isValidGrpcAddress(value: string): boolean {
-  try {
-    const address = new URL('grpc://' + value);
-    const port = Number(address.port);
-    const hasHostAndPort =
-      address.hostname.length > 0 && address.port.length > 0;
-    const hasValidPort = Number.isInteger(port) && port >= 1 && port <= 65_535;
-    const hasCredentials =
-      address.username.length > 0 || address.password.length > 0;
-    const hasExtraParts =
-      address.pathname.length > 0 ||
-      address.search.length > 0 ||
-      address.hash.length > 0;
-
-    return hasHostAndPort && hasValidPort && !hasCredentials && !hasExtraParts;
-  } catch {
-    return false;
-  }
-}
-
-const grpcAddress = Joi.string()
-  .trim()
-  .custom((value: string, helpers) =>
-    isValidGrpcAddress(value) ? value : helpers.error('grpc.address'),
-  )
-  .messages({
-    'grpc.address': '{{#label}} must be a valid gRPC host:port address',
-  });
 
 export const authEnvironmentSchema = Joi.object({
   NODE_ENV: nodeEnvironment,

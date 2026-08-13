@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { type MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { ENTITLEMENTS_GRPC_LOADER } from '@pixaeron/entitlements-contract';
 import { join } from 'node:path';
 import { AppModule } from './app/app.module';
 import { configureHttp, init } from '@pixaeron/nestjs';
@@ -36,6 +37,7 @@ async function bootstrap() {
         package: 'pixaeron.entitlements.v1',
         protoPath: entitlementsProtoPath,
         url: entitlementsAddress,
+        loader: { ...ENTITLEMENTS_GRPC_LOADER },
       },
     });
     await app.startAllMicroservices();

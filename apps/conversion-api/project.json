@@ -1,0 +1,140 @@
+{
+  "name": "conversion-api",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/conversion-api/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "dependsOn": ["prisma-generate", "^build"],
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "webpack-cli build",
+        "env": {
+          "NODE_ENV": "production"
+        },
+        "cwd": "apps/conversion-api",
+        "assets": [
+          "apps/conversion-api/src/assets",
+          {
+            "input": "libs/entitlements-contract/proto",
+            "glob": "**/*.proto",
+            "output": "proto"
+          }
+        ]
+      },
+      "configurations": {
+        "development": {
+          "env": {
+            "NODE_ENV": "development"
+          }
+        }
+      }
+    },
+    "prune-lockfile": {
+      "dependsOn": ["build"],
+      "cache": true,
+      "executor": "@nx/js:prune-lockfile",
+      "outputs": [
+        "{workspaceRoot}/dist/apps/conversion-api/package.json",
+        "{workspaceRoot}/dist/apps/conversion-api/package-lock.json"
+      ],
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "copy-workspace-modules": {
+      "dependsOn": ["build"],
+      "cache": true,
+      "outputs": ["{workspaceRoot}/dist/apps/conversion-api/workspace_modules"],
+      "executor": "@nx/js:copy-workspace-modules",
+      "options": {
+        "buildTarget": "build"
+      }
+    },
+    "prune": {
+      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
+      "executor": "nx:noop"
+    },
+    "serve": {
+      "continuous": true,
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "dependsOn": ["build"],
+      "options": {
+        "buildTarget": "conversion-api:build",
+        "runBuildTargetDependencies": false
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "conversion-api:build:development"
+        },
+        "production": {
+          "buildTarget": "conversion-api:build:production"
+        }
+      }
+    },
+    "test": {
+      "dependsOn": ["prisma-generate"],
+      "options": {
+        "passWithNoTests": true
+      }
+    },
+    "prisma-generate": {
+      "command": "prisma generate",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/prisma/schema.prisma",
+        "{projectRoot}/prisma.config.ts",
+        "{workspaceRoot}/package-lock.json"
+      ],
+      "outputs": ["{projectRoot}/src/generated/prisma"]
+    },
+    "prisma-migrate-dev": {
+      "command": "prisma migrate dev",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-migrate-deploy": {
+      "command": "prisma migrate deploy",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-validate": {
+      "command": "prisma validate",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "prisma-studio": {
+      "command": "prisma studio",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "db-integration": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["prisma-generate"],
+      "options": {
+        "commands": [
+          "prisma migrate deploy --config apps/conversion-api/prisma.config.ts",
+          "jest --config apps/conversion-api/jest.integration.config.cts --runInBand"
+        ],
+        "parallel": false,
+        "cwd": "{workspaceRoot}"
+      },
+      "configurations": {
+        "local": {
+          "env": {
+            "DATABASE_URL": "postgresql://conversion:conversion@127.0.0.1:5435/pixaeron_conversion?schema=public"
+          }
+        }
+      }
+    }
+  }
+}

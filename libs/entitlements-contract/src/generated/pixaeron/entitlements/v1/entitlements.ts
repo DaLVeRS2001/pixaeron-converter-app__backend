@@ -2,9 +2,9 @@
 // source: pixaeron/entitlements/v1/entitlements.proto
 
 /* eslint-disable */
-import type { Metadata } from '@grpc/grpc-js';
-import { GrpcMethod, GrpcStreamMethod } from '@nestjs/microservices';
-import { Observable } from 'rxjs';
+import type { Metadata } from "@grpc/grpc-js";
+import { GrpcMethod, GrpcStreamMethod } from "@nestjs/microservices";
+import { Observable } from "rxjs";
 
 export enum EntitlementPlanCode {
   ENTITLEMENT_PLAN_CODE_UNSPECIFIED = 0,
@@ -37,11 +37,7 @@ export interface EntitlementSnapshot {
 }
 
 export interface EntitlementsServiceClient {
-  getEntitlement(
-    request: GetEntitlementRequest,
-    metadata: Metadata,
-    ...rest: any
-  ): Observable<GetEntitlementResponse>;
+  getEntitlement(request: GetEntitlementRequest, metadata: Metadata, ...rest: any): Observable<GetEntitlementResponse>;
 }
 
 export interface EntitlementsServiceController {
@@ -49,39 +45,22 @@ export interface EntitlementsServiceController {
     request: GetEntitlementRequest,
     metadata: Metadata,
     ...rest: any
-  ):
-    | Promise<GetEntitlementResponse>
-    | Observable<GetEntitlementResponse>
-    | GetEntitlementResponse;
+  ): Promise<GetEntitlementResponse> | Observable<GetEntitlementResponse> | GetEntitlementResponse;
 }
 
 export function EntitlementsServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = ['getEntitlement'];
+    const grpcMethods: string[] = ["getEntitlement"];
     for (const method of grpcMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(
-        constructor.prototype,
-        method,
-      );
-      GrpcMethod('EntitlementsService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
+      GrpcMethod("EntitlementsService", method)(constructor.prototype[method], method, descriptor);
     }
     const grpcStreamMethods: string[] = [];
     for (const method of grpcStreamMethods) {
-      const descriptor: any = Reflect.getOwnPropertyDescriptor(
-        constructor.prototype,
-        method,
-      );
-      GrpcStreamMethod('EntitlementsService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
+      GrpcStreamMethod("EntitlementsService", method)(constructor.prototype[method], method, descriptor);
     }
   };
 }
 
-export const ENTITLEMENTS_SERVICE_NAME = 'EntitlementsService';
+export const ENTITLEMENTS_SERVICE_NAME = "EntitlementsService";

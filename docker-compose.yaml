@@ -18,6 +18,25 @@ services:
     networks:
       - default
 
+  conversion-postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: conversion
+      POSTGRES_PASSWORD: conversion
+      POSTGRES_DB: pixaeron_conversion
+    ports:
+      - '127.0.0.1:5435:5432'
+    volumes:
+      - conversion_postgres18_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U conversion -d pixaeron_conversion']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - conversion_data
+
   notifications-postgres:
     image: postgres:18
     restart: unless-stopped
@@ -52,11 +71,14 @@ services:
       NOTIFICATIONS_GRPC_URL: notifications-command:50052
       NOTIFICATIONS_GRPC_DEADLINE_MS: 2000
       EMAIL_ACTION_RESPONSE_BUDGET_MS: 2500
+      ENTITLEMENTS_GRPC_HOST: 0.0.0.0
+      ENTITLEMENTS_GRPC_PORT: 50053
     command: >-
       sh -c "./node_modules/.bin/prisma migrate deploy
       --config apps/auth/prisma.config.ts && node main.js"
     ports:
       - '127.0.0.1:3001:3000'
+      - '127.0.0.1:50053:50053'
     depends_on:
       postgres:
         condition: service_healthy
@@ -169,12 +191,14 @@ services:
       - default
 
 networks:
+  conversion_data:
   notifications_command:
     internal: true
   notifications_data:
   notifications_egress:
 
 volumes:
+  conversion_postgres18_data:
   notifications_postgres18_data:
   postgres18_data:
   redis_data:
