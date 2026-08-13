@@ -13,7 +13,6 @@ import type { SesFeedback } from './ses-feedback-parser';
 import { applySesFeedbackTransitions } from './ses-feedback-transitions';
 
 const databaseUrl = process.env['DATABASE_URL'];
-const describeDb = databaseUrl ? describe : describe.skip;
 
 const T5 = new Date('2026-01-01T00:00:05Z');
 const T10 = new Date('2026-01-01T00:00:10Z');
@@ -22,7 +21,7 @@ const T30 = new Date('2026-01-01T00:00:30Z');
 
 const hex = () => randomBytes(32).toString('hex');
 
-describeDb('ses-feedback-transitions on Postgres', () => {
+describe('ses-feedback-transitions on Postgres', () => {
   let prisma: PrismaClient;
   let secondClient: PrismaClient;
   let aliases: RecipientHash[];

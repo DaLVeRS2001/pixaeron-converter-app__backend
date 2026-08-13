@@ -3,14 +3,7 @@
 Verified against the repositories on 2026-08-13. Completed work is recorded in
 the guides under docs/, not here.
 
-1. Concurrency tests still worth writing; no new tooling needed:
-   - Refresh-token rotation and family reuse under parallel refresh in
-     `apps/auth-e2e`; `auth-token.service.ts` relies on
-     `pg_advisory_xact_lock`.
-   - The shared HTTP rate limit against real Redis, including the 503 fallback
-     in `http-rate-limit.middleware.ts`, which is untested.
-
-2. Load tests - deferred by owner decision until the converter and compressor
+1. Load tests - deferred by owner decision until the converter and compressor
    implementations land; load shape is unknowable before the heavy endpoints
    exist.
 

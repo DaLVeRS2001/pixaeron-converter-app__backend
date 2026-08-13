@@ -135,6 +135,25 @@
       },
       "dependsOn": ["prisma-generate"]
     },
+    "db-integration": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["prisma-generate"],
+      "options": {
+        "commands": [
+          "prisma migrate deploy --config apps/auth/prisma.config.ts",
+          "jest --config apps/auth/jest.integration.config.cts --runInBand"
+        ],
+        "parallel": false,
+        "cwd": "{workspaceRoot}"
+      },
+      "configurations": {
+        "local": {
+          "env": {
+            "DATABASE_URL": "postgresql://postgres:postgres@127.0.0.1:5433/pixaeron_auth?schema=public"
+          }
+        }
+      }
+    },
     "schema-check": {
       "executor": "nx:run-commands",
       "cache": true,
