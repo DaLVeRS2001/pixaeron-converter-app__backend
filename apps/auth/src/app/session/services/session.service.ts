@@ -283,6 +283,10 @@ export class SessionService {
     );
     if (!parsedToken) return this.rejectSession(response);
 
+    const refreshToken = await this.prisma.sessionRefreshToken.findUnique({
+      where: { id: parsedToken.tokenId },
+    });
+
     const session = await this.prisma.session.findUnique({
       where: { id: parsedToken.sessionId },
       include: { user: { select: authenticatedUserSelect } },
@@ -290,10 +294,6 @@ export class SessionService {
     if (!session) return this.rejectSession(response);
 
     await this.assertRefreshAllowed(session, request, response, now);
-
-    const refreshToken = await this.prisma.sessionRefreshToken.findUnique({
-      where: { id: parsedToken.tokenId },
-    });
     const refreshCredentialMatches =
       refreshToken?.sessionId === session.id
         ? await this.sessionTokenService.verifyRefreshCredential(
@@ -362,15 +362,11 @@ export class SessionService {
     const consumedAt = context.refreshToken.consumedAt;
     if (!consumedAt) return;
 
-    const reuseAge = now.getTime() - consumedAt.getTime();
+    const reuseAge = Math.abs(now.getTime() - consumedAt.getTime());
     const isPreviousToken =
       context.session.rotatedAt?.getTime() === consumedAt.getTime();
 
-    if (
-      isPreviousToken &&
-      reuseAge >= 0 &&
-      reuseAge <= REFRESH_REUSE_GRACE_MS
-    ) {
+    if (isPreviousToken && reuseAge <= REFRESH_REUSE_GRACE_MS) {
       await this.sessionAuditService.recordRefreshFailed(
         context.session.id,
         context.session.userId,
