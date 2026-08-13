@@ -4,5 +4,16 @@
   "sourceRoot": "libs/rate-limit/src",
   "projectType": "library",
   "tags": [],
-  "targets": {}
+  "targets": {
+    "redis-integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "jest --config libs/rate-limit/jest.integration.config.cts --runInBand",
+        "cwd": "{workspaceRoot}",
+        "env": {
+          "REDIS_URL": "redis://127.0.0.1:6379"
+        }
+      }
+    }
+  }
 }

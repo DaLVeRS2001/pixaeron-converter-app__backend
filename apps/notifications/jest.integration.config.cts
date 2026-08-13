@@ -1,8 +1,9 @@
 module.exports = {
-  displayName: 'notifications-integration',
+  displayName: 'notifications-db-integration',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/src/**/*.integration.spec.ts'],
+  testMatch: ['<rootDir>/src/**/*.db.spec.ts'],
+  passWithNoTests: false,
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },

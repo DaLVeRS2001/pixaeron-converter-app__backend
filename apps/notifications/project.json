@@ -127,6 +127,13 @@
         ],
         "parallel": false,
         "cwd": "{workspaceRoot}"
+      },
+      "configurations": {
+        "local": {
+          "env": {
+            "DATABASE_URL": "postgresql://notifications:notifications@127.0.0.1:5434/pixaeron_notifications?schema=public"
+          }
+        }
       }
     }
   }
