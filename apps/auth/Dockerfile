@@ -14,6 +14,7 @@ COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY webpack.app.config.js ./
 COPY apps/auth/package.json ./apps/auth/package.json
 COPY libs ./libs
+COPY tools ./tools
 
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --workspaces --include-workspace-root
