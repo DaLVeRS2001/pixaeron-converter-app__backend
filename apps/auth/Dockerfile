@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY apps/auth ./apps/auth
 
-RUN find libs/notifications-contract/src/generated libs/entitlements-contract/src/generated -type f -exec chmod 0644 {} + \
+RUN find libs -path '*/src/generated/*' -type f -exec chmod 0644 {} + \
   && npx nx run auth:prune
 
 FROM node:24-bookworm-slim AS runner

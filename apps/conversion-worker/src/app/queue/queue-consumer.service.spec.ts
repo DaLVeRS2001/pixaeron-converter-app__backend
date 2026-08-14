@@ -30,6 +30,7 @@ describe('QueueConsumerService', () => {
         bytes: Buffer.from('output-bytes'),
         format: 'jpeg',
         contentType: 'image/jpeg',
+        frames: 1,
         width: 10,
         height: 20,
       }),
@@ -92,6 +93,8 @@ describe('QueueConsumerService', () => {
       attempt: 2,
       outcome: 'COMPLETED',
       resultKind: 'SAVED',
+      inputFormat: 'jpeg',
+      frameCount: 1,
       outputObjectKey: 'outputs/batch-1/file-1',
       outputBytes: 12,
       outputChecksum: createHash('sha256')
@@ -168,9 +171,9 @@ describe('QueueConsumerService', () => {
     },
   );
 
-  it('grants the processing slot to the highest waiting tier first', async () => {
+  it('grants the processing slot to the highest waiting priority first', async () => {
     const internals = service as unknown as {
-      acquire: (tier: number) => Promise<void>;
+      acquire: (priority: number) => Promise<void>;
       release: () => void;
     };
     const order: number[] = [];
@@ -189,5 +192,27 @@ describe('QueueConsumerService', () => {
     await Promise.all(waiters);
 
     expect(order).toEqual([0, 1, 2]);
+  });
+
+  it('grants a starved low-priority waiter within the anti-starvation period', async () => {
+    const internals = service as unknown as {
+      acquire: (priority: number) => Promise<void>;
+      release: () => void;
+    };
+    const grantOrder: number[] = [];
+    const granted = (priority: number) => () => {
+      grantOrder.push(priority);
+      internals.release();
+    };
+
+    await internals.acquire(0);
+    const waiters = [internals.acquire(3).then(granted(3))];
+    for (let index = 0; index < 10; index++) {
+      waiters.push(internals.acquire(0).then(granted(0)));
+    }
+    internals.release();
+    await Promise.all(waiters);
+
+    expect(grantOrder.indexOf(3)).toBeLessThan(8);
   });
 });

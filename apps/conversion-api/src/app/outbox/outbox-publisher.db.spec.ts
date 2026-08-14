@@ -100,12 +100,7 @@ describe('OutboxPublisherService on Postgres', () => {
       events.map(({ payload }) => payload.fileId).sort(),
     );
 
-    const rows = await statuses();
-    expect(rows).toHaveLength(12);
-    for (const row of rows) {
-      expect(row.status).toBe(OutboxEventStatus.DELIVERED);
-      expect(row.deliveredAt).not.toBeNull();
-    }
+    expect(await statuses()).toHaveLength(0);
   });
 
   it('backs off a failing event without blocking the rest of the claim', async () => {
@@ -115,33 +110,24 @@ describe('OutboxPublisherService on Postgres', () => {
     await service.drain();
 
     let rows = await statuses();
-    const failed = rows.filter(
-      ({ status }) => status === OutboxEventStatus.PENDING,
-    );
-    expect(failed).toHaveLength(1);
-    expect(failed[0].attempts).toBe(1);
-    expect(
-      rows.filter(({ status }) => status === OutboxEventStatus.DELIVERED),
-    ).toHaveLength(2);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe(OutboxEventStatus.PENDING);
+    expect(rows[0].attempts).toBe(1);
+    const failedId = rows[0].id;
 
     await service.drain();
 
     rows = await statuses();
-    expect(
-      rows.filter(({ status }) => status === OutboxEventStatus.PENDING),
-    ).toHaveLength(1);
+    expect(rows).toHaveLength(1);
 
     await prisma.$executeRaw`
       UPDATE "outbox_events"
       SET "next_attempt_at" = now() - interval '1 second'
-      WHERE "id" = ${failed[0].id}
+      WHERE "id" = ${failedId}
     `;
     await service.drain();
 
-    rows = await statuses();
-    expect(
-      rows.filter(({ status }) => status === OutboxEventStatus.PENDING),
-    ).toHaveLength(0);
+    expect(await statuses()).toHaveLength(0);
   });
 
   it('keeps draining past failures and terminates when every send fails', async () => {
@@ -178,10 +164,6 @@ describe('OutboxPublisherService on Postgres', () => {
 
     const sent = [...seededSends(send), ...seededSends(secondSend)];
     expect(sent).toHaveLength(25);
-    const rows = await statuses();
-    expect(rows).toHaveLength(25);
-    for (const row of rows) {
-      expect(row.status).toBe(OutboxEventStatus.DELIVERED);
-    }
+    expect(await statuses()).toHaveLength(0);
   });
 });

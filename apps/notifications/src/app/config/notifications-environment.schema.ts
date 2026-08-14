@@ -1,4 +1,8 @@
 import {
+  awsAccessKeyId,
+  awsAccountId,
+  awsRegion,
+  awsSecretAccessKey,
   booleanValue,
   nodeEnvironment,
   port,
@@ -74,9 +78,9 @@ export const notificationsEnvironmentSchema = Joi.object({
   RECIPIENT_HMAC_KEYRING_JSON: recipientHmacKeyring,
   RECIPIENT_HMAC_ACTIVE_KEY_VERSION: keyVersion.required(),
 
-  AWS_REGION: Joi.string().valid('eu-central-1').required(),
-  AWS_ACCESS_KEY_ID: Joi.string().trim().min(16).max(128).required(),
-  AWS_SECRET_ACCESS_KEY: Joi.string().trim().min(40).max(256).required(),
+  AWS_REGION: awsRegion,
+  AWS_ACCESS_KEY_ID: awsAccessKeyId,
+  AWS_SECRET_ACCESS_KEY: awsSecretAccessKey,
   SES_FROM_EMAIL: sesSender.required(),
   SES_CONFIGURATION_SET: Joi.string().trim().min(1).max(64).required(),
   SES_REQUEST_TIMEOUT_MS: Joi.number()
@@ -96,9 +100,7 @@ export const notificationsEnvironmentSchema = Joi.object({
         '{{#label}} must be an exact eu-central-1 Standard SQS queue URL',
     }),
   SES_FEEDBACK_TOPIC_ARN: Joi.string().pattern(snsTopicArnPattern).required(),
-  SES_EXPECTED_ACCOUNT_ID: Joi.string()
-    .pattern(/^\d{12}$/)
-    .required(),
+  SES_EXPECTED_ACCOUNT_ID: awsAccountId,
   SES_EXPECTED_SOURCE_ARN: Joi.string()
     .pattern(sesIdentityArnPattern)
     .required(),

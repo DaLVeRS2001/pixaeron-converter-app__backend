@@ -17,6 +17,7 @@ export const COMMAND_SECRET_METADATA_KEY = 'x-pixaeron-command-secret';
 export class EntitlementsClient implements OnModuleInit {
   private readonly deadlineMs: number;
   private readonly commandSecret: string | undefined;
+  private readonly largeFileBytes: number;
   private entitlementsService!: EntitlementsServiceClient;
 
   constructor(
@@ -30,6 +31,9 @@ export class EntitlementsClient implements OnModuleInit {
     this.commandSecret = configService.get<string>(
       'ENTITLEMENTS_COMMAND_SECRET',
     );
+    this.largeFileBytes = Number(
+      configService.getOrThrow<string>('CONVERSION_LARGE_FILE_BYTES'),
+    );
   }
 
   onModuleInit(): void {
@@ -39,7 +43,7 @@ export class EntitlementsClient implements OnModuleInit {
       );
   }
 
-  getEntitlement(
+  async getEntitlement(
     request: GetEntitlementRequest,
   ): Promise<GetEntitlementResponse> {
     const options: CallOptions = {
@@ -50,8 +54,17 @@ export class EntitlementsClient implements OnModuleInit {
       metadata.add(COMMAND_SECRET_METADATA_KEY, this.commandSecret);
     }
 
-    return firstValueFrom(
+    const response = await firstValueFrom(
       this.entitlementsService.getEntitlement(request, metadata, options),
     );
+
+    if (response.snapshot) {
+      response.snapshot.maxFileBytes = Math.min(
+        response.snapshot.maxFileBytes,
+        this.largeFileBytes,
+      );
+    }
+
+    return response;
   }
 }

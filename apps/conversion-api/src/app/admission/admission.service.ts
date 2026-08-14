@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  PAID_LARGE_QUEUE,
+  TIER_QUEUES,
+  type ConversionRequestMessage,
+} from '@pixaeron/conversion-contract';
+import {
   EntitlementPlanCode,
   type EntitlementSnapshot,
 } from '@pixaeron/entitlements-contract';
@@ -38,13 +43,6 @@ export const PLAN_CODES: Partial<
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_PRO]: ConversionPlanCode.PRO,
 };
 
-const TIER_QUEUES: Record<number, string> = {
-  0: 'pixaeron-conversion-anon',
-  1: 'pixaeron-conversion-free',
-  2: 'pixaeron-conversion-light',
-  3: 'pixaeron-conversion-pro',
-};
-const PAID_LARGE_QUEUE = 'pixaeron-conversion-paid-large';
 const FIRST_PAID_TIER = 2;
 
 export type AdmissionErrorCode =
@@ -238,7 +236,7 @@ export class AdmissionService {
       }
 
       for (const file of claimed) {
-        if (file.input_bytes === null) {
+        if (file.input_bytes === null || file.input_etag === null) {
           throw new AdmissionError('FILE_NOT_MEASURED');
         }
         if (Number(file.input_bytes) > snapshot.maxFileBytes) {
@@ -287,8 +285,8 @@ export class AdmissionService {
             fileId: file.id,
             batchId: batch.id,
             inputObjectKey: file.input_object_key,
-            inputEtag: file.input_etag,
-          },
+            inputEtag: file.input_etag as string,
+          } satisfies ConversionRequestMessage,
         })),
       });
 

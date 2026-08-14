@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 COPY apps/notifications ./apps/notifications
 
-RUN find libs/notifications-contract/src/generated -type f -exec chmod 0644 {} + \
+RUN find libs -path '*/src/generated/*' -type f -exec chmod 0644 {} + \
   && npx nx run notifications:prune
 
 FROM node:24-bookworm-slim AS runner

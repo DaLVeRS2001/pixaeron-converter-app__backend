@@ -2,8 +2,9 @@ import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { queueUrl } from '@pixaeron/conversion-contract';
 
-import { OutboxEventStatus, Prisma } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 const CLAIM_BATCH_SIZE = 10;
@@ -20,7 +21,8 @@ type ClaimedEvent = {
 export class OutboxPublisherService {
   private readonly logger = new Logger(OutboxPublisherService.name);
   private readonly client: SQSClient;
-  private readonly queueUrlPrefix: string;
+  private readonly region: string;
+  private readonly accountId: string;
   private readonly queueSuffix: string;
   private inFlight?: Promise<void>;
 
@@ -29,8 +31,8 @@ export class OutboxPublisherService {
     configService: ConfigService,
   ) {
     const region = configService.getOrThrow<string>('AWS_REGION');
-    const accountId = configService.getOrThrow<string>('AWS_ACCOUNT_ID');
-    this.queueUrlPrefix = `https://sqs.${region}.amazonaws.com/${accountId}/`;
+    this.region = region;
+    this.accountId = configService.getOrThrow<string>('AWS_ACCOUNT_ID');
     this.queueSuffix = configService.get<string>('SQS_QUEUE_SUFFIX') ?? '';
     this.client = new SQSClient({
       region,
@@ -75,7 +77,12 @@ export class OutboxPublisherService {
                 try {
                   await this.client.send(
                     new SendMessageCommand({
-                      QueueUrl: `${this.queueUrlPrefix}${event.queue}${this.queueSuffix}`,
+                      QueueUrl: queueUrl(
+                        this.region,
+                        this.accountId,
+                        event.queue,
+                        this.queueSuffix,
+                      ),
                       MessageBody: JSON.stringify(event.payload),
                     }),
                   );
@@ -89,12 +96,8 @@ export class OutboxPublisherService {
               }
 
               if (deliveredIds.length > 0) {
-                await transaction.outboxEvent.updateMany({
+                await transaction.outboxEvent.deleteMany({
                   where: { id: { in: deliveredIds } },
-                  data: {
-                    status: OutboxEventStatus.DELIVERED,
-                    deliveredAt: new Date(),
-                  },
                 });
               }
               if (failedIds.length > 0) {

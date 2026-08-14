@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { crc32 } from 'node:zlib';
 import sharp from 'sharp';
 
 import { ImageCompressorService } from './image-compressor.service';
@@ -178,22 +179,12 @@ describe('ImageCompressorService', () => {
     expect(reencoded.length).toBeGreaterThan(clean.length + 64);
     const payload = Buffer.from('parameters\0secret prompt', 'latin1');
     const typeAndData = Buffer.concat([Buffer.from('tEXt', 'latin1'), payload]);
-    let crc = 0xffffffff;
-    for (const byte of typeAndData) {
-      crc ^= byte;
-      for (let bit = 0; bit < 8; bit++) {
-        crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
-      }
-    }
+    const checksum = Buffer.alloc(4);
+    checksum.writeUInt32BE(crc32(typeAndData));
     const chunk = Buffer.concat([
       Buffer.from([0, 0, 0, payload.length]),
       typeAndData,
-      Buffer.from([
-        (~crc >>> 24) & 0xff,
-        (~crc >>> 16) & 0xff,
-        (~crc >>> 8) & 0xff,
-        ~crc & 0xff,
-      ]),
+      checksum,
     ]);
     const iendOffset = clean.length - 12;
     const withText = Buffer.concat([
@@ -210,6 +201,82 @@ describe('ImageCompressorService', () => {
 
     expect(result).toMatchObject({ ok: true, kind: 'SANITIZED_LARGER' });
     if (result.ok) expect(result.bytes.equals(withText)).toBe(false);
+  });
+
+  it('denies NO_SAVINGS to a JPEG with bytes appended after EOI', async () => {
+    const clean = await gradientImage(24, 24).jpeg({ quality: 40 }).toBuffer();
+    expect(clean[clean.length - 2]).toBe(0xff);
+    expect(clean[clean.length - 1]).toBe(0xd9);
+    const withTrailer = Buffer.concat([
+      clean,
+      Buffer.from('hidden payload', 'latin1'),
+    ]);
+
+    const result = await service().compress(withTrailer);
+
+    expect(result).toMatchObject({ ok: true, kind: 'SANITIZED_LARGER' });
+    if (result.ok) expect(result.bytes.equals(withTrailer)).toBe(false);
+  });
+
+  it('denies NO_SAVINGS to a JPEG carrying a non-ICC APP2 segment', async () => {
+    const clean = await gradientImage(24, 24).jpeg({ quality: 40 }).toBuffer();
+    const payload = Buffer.from('MPF\0second-image', 'latin1');
+    const segment = Buffer.concat([
+      Buffer.from([
+        0xff,
+        0xe2,
+        (payload.length + 2) >> 8,
+        (payload.length + 2) & 0xff,
+      ]),
+      payload,
+    ]);
+    const withMpf = Buffer.concat([
+      clean.subarray(0, 2),
+      segment,
+      clean.subarray(2),
+    ]);
+
+    const result = await service().compress(withMpf);
+
+    expect(result).toMatchObject({ ok: true, kind: 'SANITIZED_LARGER' });
+    if (result.ok) {
+      expect(result.bytes.includes(Buffer.from('second-image', 'latin1'))).toBe(
+        false,
+      );
+    }
+  });
+
+  it('never returns original bytes for webp, which has no byte-level scan', async () => {
+    const clean = await gradientImage(64, 64).webp({ quality: 20 }).toBuffer();
+    const privPayload = Buffer.from('private-riff-data', 'latin1');
+    const privChunk = Buffer.concat([
+      Buffer.from('PRIV', 'latin1'),
+      (() => {
+        const size = Buffer.alloc(4);
+        size.writeUInt32LE(privPayload.length);
+        return size;
+      })(),
+      privPayload,
+      privPayload.length % 2 ? Buffer.from([0]) : Buffer.alloc(0),
+    ]);
+    const withPriv = Buffer.concat([clean, privChunk]);
+    withPriv.writeUInt32LE(withPriv.length - 8, 4);
+    expect((await sharp(withPriv).metadata()).format).toBe('webp');
+
+    for (const input of [clean, withPriv]) {
+      const result = await service().compress(input);
+      expect(result).toMatchObject({ ok: true });
+      if (result.ok && result.kind !== 'SAVED') {
+        expect(result.kind).toBe('SANITIZED_LARGER');
+        expect(result.bytes.equals(input)).toBe(false);
+      }
+    }
+    const result = await service().compress(withPriv);
+    if (result.ok) {
+      expect(result.bytes.includes(Buffer.from('private-riff-data'))).toBe(
+        false,
+      );
+    }
   });
 
   it('rejects undecodable bytes', async () => {

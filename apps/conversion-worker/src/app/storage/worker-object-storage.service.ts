@@ -55,7 +55,7 @@ export class WorkerObjectStorageService {
         }),
         { abortSignal: AbortSignal.timeout(TRANSFER_DEADLINE_MS) },
       );
-      if ((object.ContentLength ?? 0) > this.maxInputBytes) {
+      if ((object.ContentLength ?? Infinity) > this.maxInputBytes) {
         throw new InputIntegrityError('INPUT_TOO_LARGE');
       }
       body = await object.Body!.transformToByteArray();
@@ -76,7 +76,7 @@ export class WorkerObjectStorageService {
       throw error;
     }
 
-    return Buffer.from(body);
+    return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
   }
 
   async putOutput(

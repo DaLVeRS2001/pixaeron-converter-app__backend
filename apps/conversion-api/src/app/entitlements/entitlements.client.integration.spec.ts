@@ -101,6 +101,7 @@ describe('EntitlementsClient gRPC transport', () => {
     });
     const client = createClient(port, {
       ENTITLEMENTS_GRPC_DEADLINE_MS: '2000',
+      CONVERSION_LARGE_FILE_BYTES: '26214400',
     });
 
     await expect(
@@ -114,6 +115,29 @@ describe('EntitlementsClient gRPC transport', () => {
     expect(receivedSecrets).toEqual([]);
   });
 
+  it('caps maxFileBytes at the large-file threshold', async () => {
+    const port = await startServer((call, callback) => {
+      callback(null, {
+        snapshot: {
+          ...response.snapshot,
+          planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_PRO,
+          maxFileBytes: 157286400,
+          queueTier: 3,
+        },
+      });
+    });
+    const client = createClient(port, {
+      ENTITLEMENTS_GRPC_DEADLINE_MS: '2000',
+      CONVERSION_LARGE_FILE_BYTES: '26214400',
+    });
+
+    const capped = await client.getEntitlement({
+      planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_PRO,
+    });
+
+    expect(capped.snapshot?.maxFileBytes).toBe(26214400);
+  });
+
   it('presents the command secret in metadata when configured', async () => {
     const port = await startServer((call, callback) => {
       receivedRequest = call.request;
@@ -123,6 +147,7 @@ describe('EntitlementsClient gRPC transport', () => {
     const client = createClient(port, {
       ENTITLEMENTS_GRPC_DEADLINE_MS: '2000',
       ENTITLEMENTS_COMMAND_SECRET: COMMAND_SECRET,
+      CONVERSION_LARGE_FILE_BYTES: '26214400',
     });
 
     await expect(

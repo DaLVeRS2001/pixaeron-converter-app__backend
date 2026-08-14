@@ -13,9 +13,13 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  queueUrl,
+  TIER_QUEUES,
+  type ConversionRequestMessage,
+} from '@pixaeron/conversion-contract';
 import { createHash } from 'node:crypto';
 
-import type { ConversionRequestMessage } from '../messages';
 import { ImageCompressorService } from '../pipeline/image-compressor.service';
 import {
   InputIntegrityError,
@@ -24,18 +28,14 @@ import {
 import { WorkerEventsService } from '../events/worker-events.service';
 import { WORKER_SQS_CLIENT } from './worker-sqs.client';
 
-const TIER_QUEUES = [
-  'pixaeron-conversion-pro',
-  'pixaeron-conversion-light',
-  'pixaeron-conversion-free',
-  'pixaeron-conversion-anon',
-];
+const PRIORITY_TIERS = [3, 2, 1, 0];
 const RECEIVE_WAIT_SECONDS = 20;
 const RETRY_DELAY_MS = 1_000;
 const CLAIM_VISIBILITY_SECONDS = 120;
 const HEARTBEAT_INTERVAL_MS = 45_000;
+const STARVATION_GRANT_PERIOD = 8;
 
-type Waiter = { tier: number; grant: () => void };
+type Waiter = { priority: number; grant: () => void };
 
 @Injectable()
 export class QueueConsumerService
@@ -43,11 +43,12 @@ export class QueueConsumerService
 {
   private readonly logger = new Logger(QueueConsumerService.name);
   private readonly queueUrls: string[];
+  private readonly shutdown = new AbortController();
   private running = false;
   private loops: Promise<void>[] = [];
-  private abortControllers = new Map<number, AbortController>();
   private busy = false;
   private waiters: Waiter[] = [];
+  private grants = 0;
 
   constructor(
     @Inject(WORKER_SQS_CLIENT) private readonly client: SQSClient,
@@ -59,18 +60,17 @@ export class QueueConsumerService
     const region = configService.getOrThrow<string>('AWS_REGION');
     const accountId = configService.getOrThrow<string>('AWS_ACCOUNT_ID');
     const suffix = configService.get<string>('SQS_QUEUE_SUFFIX') ?? '';
-    this.queueUrls = TIER_QUEUES.map(
-      (queue) =>
-        `https://sqs.${region}.amazonaws.com/${accountId}/${queue}${suffix}`,
+    this.queueUrls = PRIORITY_TIERS.map((tier) =>
+      queueUrl(region, accountId, TIER_QUEUES[tier], suffix),
     );
   }
 
   onApplicationBootstrap(): void {
     this.running = true;
-    this.loops = this.queueUrls.map((queueUrl, tier) =>
-      this.pollLoop(tier, queueUrl).finally(() => {
+    this.loops = this.queueUrls.map((url, priority) =>
+      this.pollLoop(priority, url).finally(() => {
         if (!this.running) return;
-        this.logger.error(`Consumer loop for ${queueUrl} died; stopping`);
+        this.logger.error(`Consumer loop for ${url} died; stopping`);
         process.kill(process.pid, 'SIGTERM');
       }),
     );
@@ -78,27 +78,23 @@ export class QueueConsumerService
 
   async onModuleDestroy(): Promise<void> {
     this.running = false;
-    for (const controller of this.abortControllers.values()) {
-      controller.abort();
-    }
+    this.shutdown.abort();
     await Promise.all(this.loops);
     this.client.destroy();
   }
 
-  private async pollLoop(tier: number, queueUrl: string): Promise<void> {
+  private async pollLoop(priority: number, url: string): Promise<void> {
     while (this.running) {
       try {
-        const controller = new AbortController();
-        this.abortControllers.set(tier, controller);
         const response = await this.client.send(
           new ReceiveMessageCommand({
-            QueueUrl: queueUrl,
+            QueueUrl: url,
             MaxNumberOfMessages: 1,
             WaitTimeSeconds: RECEIVE_WAIT_SECONDS,
             VisibilityTimeout: CLAIM_VISIBILITY_SECONDS,
             MessageSystemAttributeNames: ['ApproximateReceiveCount'],
           }),
-          { abortSignal: controller.signal },
+          { abortSignal: this.shutdown.signal },
         );
 
         const message = response.Messages?.[0];
@@ -109,7 +105,7 @@ export class QueueConsumerService
           this.client
             .send(
               new ChangeMessageVisibilityCommand({
-                QueueUrl: queueUrl,
+                QueueUrl: url,
                 ReceiptHandle: receiptHandle,
                 VisibilityTimeout: CLAIM_VISIBILITY_SECONDS,
               }),
@@ -120,9 +116,9 @@ export class QueueConsumerService
         }, HEARTBEAT_INTERVAL_MS);
 
         try {
-          await this.acquire(tier);
+          await this.acquire(priority);
           try {
-            await this.handle(queueUrl, message);
+            await this.handle(url, message);
           } finally {
             this.release();
           }
@@ -133,34 +129,38 @@ export class QueueConsumerService
         if (!this.running || (error as Error).name === 'AbortError') break;
 
         this.logger.error(
-          `Queue poll failed for ${queueUrl}: ${(error as Error).message}`,
+          `Queue poll failed for ${url}: ${(error as Error).message}`,
         );
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-      } finally {
-        this.abortControllers.delete(tier);
       }
     }
   }
 
-  private acquire(tier: number): Promise<void> {
+  private acquire(priority: number): Promise<void> {
     if (!this.busy) {
       this.busy = true;
       return Promise.resolve();
     }
 
     return new Promise<void>((resolve) => {
-      this.waiters.push({ tier, grant: resolve });
-      this.waiters.sort((a, b) => a.tier - b.tier);
+      this.waiters.push({ priority, grant: resolve });
+      this.waiters.sort((a, b) => a.priority - b.priority);
     });
   }
 
   private release(): void {
-    const next = this.waiters.shift();
-    if (next) next.grant();
-    else this.busy = false;
+    const starvedTurn =
+      this.grants % STARVATION_GRANT_PERIOD === STARVATION_GRANT_PERIOD - 1;
+    const next = starvedTurn ? this.waiters.pop() : this.waiters.shift();
+    if (next) {
+      this.grants++;
+      next.grant();
+    } else {
+      this.busy = false;
+    }
   }
 
-  private async handle(queueUrl: string, message: Message): Promise<void> {
+  private async handle(url: string, message: Message): Promise<void> {
     const receiptHandle = message.ReceiptHandle as string;
 
     let parsed: unknown;
@@ -183,7 +183,7 @@ export class QueueConsumerService
         : null;
     if (!request) {
       this.logger.error(
-        `Malformed conversion request on ${queueUrl}; leaving for redrive`,
+        `Malformed conversion request on ${url}; leaving for redrive`,
       );
       return;
     }
@@ -212,7 +212,7 @@ export class QueueConsumerService
           outcome: 'FAILED',
           failureCode: error.failureCode,
         });
-        await this.deleteMessage(queueUrl, receiptHandle);
+        await this.deleteMessage(url, receiptHandle);
         return;
       }
       throw error;
@@ -226,7 +226,7 @@ export class QueueConsumerService
         outcome: 'FAILED',
         failureCode: result.failureCode,
       });
-      await this.deleteMessage(queueUrl, receiptHandle);
+      await this.deleteMessage(url, receiptHandle);
       return;
     }
 
@@ -241,6 +241,8 @@ export class QueueConsumerService
       ...base,
       outcome: 'COMPLETED',
       resultKind: result.kind,
+      inputFormat: result.format,
+      frameCount: result.frames,
       outputObjectKey,
       outputBytes: result.bytes.length,
       outputChecksum: createHash('sha256').update(result.bytes).digest('hex'),
@@ -248,16 +250,16 @@ export class QueueConsumerService
       width: result.width,
       height: result.height,
     });
-    await this.deleteMessage(queueUrl, receiptHandle);
+    await this.deleteMessage(url, receiptHandle);
   }
 
   private async deleteMessage(
-    queueUrl: string,
+    url: string,
     receiptHandle: string,
   ): Promise<void> {
     await this.client.send(
       new DeleteMessageCommand({
-        QueueUrl: queueUrl,
+        QueueUrl: url,
         ReceiptHandle: receiptHandle,
       }),
     );

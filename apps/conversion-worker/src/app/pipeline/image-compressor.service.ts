@@ -16,6 +16,7 @@ export type CompressionResult =
       bytes: Buffer;
       format: string;
       contentType: string;
+      frames: number;
       width: number;
       height: number;
     }
@@ -28,7 +29,9 @@ const CONTENT_TYPES: Record<string, string> = {
   avif: 'image/avif',
 };
 
-const JPEG_CLEAN_SEGMENTS = new Set([0xe0, 0xe2]);
+const JPEG_APP0 = 0xe0;
+const JPEG_APP2 = 0xe2;
+const ICC_PREFIX = Buffer.from('ICC_PROFILE\0', 'latin1');
 const PNG_CLEAN_CHUNKS = new Set([
   'IHDR',
   'PLTE',
@@ -69,12 +72,10 @@ export class ImageCompressorService {
       return { ok: false, failureCode: 'DECODE_FAILED' };
     }
 
-    const format =
-      metadata.format === 'heif'
-        ? metadata.compression === 'av1'
-          ? 'avif'
-          : ''
-        : (metadata.format ?? '');
+    let format: string = metadata.format ?? '';
+    if (format === 'heif') {
+      format = metadata.compression === 'av1' ? 'avif' : '';
+    }
     if (!(format in CONTENT_TYPES)) {
       return { ok: false, failureCode: 'UNSUPPORTED_FORMAT' };
     }
@@ -115,6 +116,7 @@ export class ImageCompressorService {
     const shape = {
       format,
       contentType: CONTENT_TYPES[format],
+      frames: metadata.pages ?? 1,
       width: encoded.info.width,
       height: encoded.info.height,
     };
@@ -127,7 +129,7 @@ export class ImageCompressorService {
       !metadata.iptc &&
       !metadata.xmp &&
       (metadata.orientation ?? 1) === 1 &&
-      !this.hasOpaqueMetadata(format, input);
+      this.bytesProvablyClean(format, input);
     if (provablyClean) {
       return { ok: true, kind: 'NO_SAVINGS', bytes: input, ...shape };
     }
@@ -140,17 +142,33 @@ export class ImageCompressorService {
     };
   }
 
-  private hasOpaqueMetadata(format: string, input: Buffer): boolean {
+  private bytesProvablyClean(format: string, input: Buffer): boolean {
     if (format === 'jpeg') {
+      if (
+        input[input.length - 2] !== 0xff ||
+        input[input.length - 1] !== 0xd9
+      ) {
+        return false;
+      }
       let offset = 2;
       while (offset + 4 <= input.length) {
-        if (input[offset] !== 0xff) return true;
+        if (input[offset] !== 0xff) return false;
         const marker = input[offset + 1];
-        if (marker === 0xda) return false;
-        if (marker >= 0xe0 && !JPEG_CLEAN_SEGMENTS.has(marker)) return true;
+        if (marker === 0xda) return true;
+        if (marker >= 0xe0 && marker !== JPEG_APP0 && marker !== JPEG_APP2) {
+          return false;
+        }
+        if (
+          marker === JPEG_APP2 &&
+          !input
+            .subarray(offset + 4, offset + 4 + ICC_PREFIX.length)
+            .equals(ICC_PREFIX)
+        ) {
+          return false;
+        }
         offset += 2 + input.readUInt16BE(offset + 2);
       }
-      return true;
+      return false;
     }
 
     if (format === 'png') {
@@ -158,11 +176,11 @@ export class ImageCompressorService {
       while (offset + 8 <= input.length) {
         const length = input.readUInt32BE(offset);
         const chunkType = input.toString('latin1', offset + 4, offset + 8);
-        if (chunkType === 'IEND') return offset + 12 + length !== input.length;
-        if (!PNG_CLEAN_CHUNKS.has(chunkType)) return true;
+        if (chunkType === 'IEND') return offset + 12 + length === input.length;
+        if (!PNG_CLEAN_CHUNKS.has(chunkType)) return false;
         offset += 12 + length;
       }
-      return true;
+      return false;
     }
 
     return false;
