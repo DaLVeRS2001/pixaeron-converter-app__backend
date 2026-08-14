@@ -7,3 +7,7 @@ export ANSIBLE_CONFIG="$PWD/ansible.cfg"
 ```bash
 ansible-playbook provision.yml --limit production --diff
 ```
+
+```bash
+ansible-playbook provision.yml --limit worker-1 --diff
+```
