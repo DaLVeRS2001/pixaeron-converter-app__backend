@@ -2,8 +2,7 @@ import { DynamicModule, Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { RedisModule } from '@nestjs-redis/client';
 
-import { RedisLockService } from './redis-lock.service';
-import { REDIS_NAMESPACE } from './redis-options';
+import { REDIS_NAMESPACE, RedisLockService } from './redis-lock.service';
 
 @Global()
 @Module({})

@@ -12,6 +12,15 @@ import { createHmac } from 'node:crypto';
 import { RATE_LIMIT_OPTIONS } from './rate-limit.options';
 import type { RateLimitOptions } from './rate-limit.options';
 
+export function hashClientIp(
+  secret: string,
+  request: { ip?: string; socket?: { remoteAddress?: string | null } },
+): string {
+  return createHmac('sha256', secret)
+    .update(request.ip || request.socket?.remoteAddress || 'unknown')
+    .digest('hex');
+}
+
 const INCREMENT_WINDOWS_SCRIPT = `
   local retryAfter = 0
 
@@ -55,9 +64,7 @@ export class HttpRateLimitMiddleware implements NestMiddleware {
       return;
     }
 
-    const ipHash = createHmac('sha256', this.ipHashSecret)
-      .update(request.ip || request.socket.remoteAddress || 'unknown')
-      .digest('hex');
+    const ipHash = hashClientIp(this.ipHashSecret, request);
     let retryAfterMs: number;
 
     try {

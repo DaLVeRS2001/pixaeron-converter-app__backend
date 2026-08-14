@@ -19,12 +19,12 @@
         "{projectRoot}/proto/**/*.proto",
         "{projectRoot}/buf.yaml",
         "{projectRoot}/buf.gen.yaml",
-        "{projectRoot}/scripts/check-generated.mjs",
+        "{workspaceRoot}/tools/contracts/check-generated.mjs",
         "{projectRoot}/src/generated/**/*.ts",
         "{workspaceRoot}/package-lock.json"
       ],
       "options": {
-        "command": "node scripts/check-generated.mjs",
+        "command": "node ../../tools/contracts/check-generated.mjs",
         "cwd": "{projectRoot}"
       }
     },
@@ -32,7 +32,7 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "node scripts/check-breaking.mjs",
+        "command": "node ../../tools/contracts/check-breaking.mjs",
         "cwd": "{projectRoot}"
       }
     },

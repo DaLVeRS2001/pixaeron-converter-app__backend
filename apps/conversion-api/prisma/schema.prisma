@@ -112,13 +112,15 @@ model DailyUsage {
 }
 
 model OutboxEvent {
-  id          String            @id @default(uuid())
-  queue       String
-  payload     Json
-  status      OutboxEventStatus @default(PENDING)
-  createdAt   DateTime          @default(now()) @map("created_at")
-  deliveredAt DateTime?         @map("delivered_at")
+  id            String            @id @default(uuid())
+  queue         String
+  payload       Json
+  status        OutboxEventStatus @default(PENDING)
+  attempts      Int               @default(0)
+  nextAttemptAt DateTime          @default(dbgenerated("CURRENT_TIMESTAMP")) @map("next_attempt_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  deliveredAt   DateTime?         @map("delivered_at")
 
-  @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
   @@map("outbox_events")
 }

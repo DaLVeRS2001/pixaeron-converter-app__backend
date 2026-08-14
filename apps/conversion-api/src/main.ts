@@ -9,12 +9,10 @@ const globalPrefix = 'conversion';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // CORS must run before middleware that can terminate a request early.
   configureHttp(app);
 
   const httpRateLimiter = app.get(HttpRateLimitMiddleware);
 
-  // Mount before Apollo so malformed GraphQL requests are rate-limited too.
   app.use('/conversion', httpRateLimiter.use.bind(httpRateLimiter));
 
   await init(app, globalPrefix);

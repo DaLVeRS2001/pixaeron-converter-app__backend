@@ -14,13 +14,14 @@ COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY webpack.app.config.js ./
 COPY apps/notifications/package.json ./apps/notifications/package.json
 COPY libs ./libs
+COPY tools ./tools
 
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --workspaces --include-workspace-root
 
 COPY apps/notifications ./apps/notifications
 
-RUN find libs/notifications-contract/src/generated -type f -exec chmod 0644 {} + \
+RUN find libs -path '*/src/generated/*' -type f -exec chmod 0644 {} + \
   && npx nx run notifications:prune
 
 FROM node:24-bookworm-slim AS runner

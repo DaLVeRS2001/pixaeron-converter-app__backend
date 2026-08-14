@@ -1,0 +1,8 @@
+{
+  "name": "conversion-contract",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/conversion-contract/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {}
+}

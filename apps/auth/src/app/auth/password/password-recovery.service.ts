@@ -4,8 +4,10 @@ import type { Request, Response } from 'express';
 
 import {
   AuthTokenType,
+  Prisma,
   SessionEventType,
   SessionRevokedReason,
+  type AuthToken,
 } from '../../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionAuditService } from '../../session/audit/session-audit.service';
@@ -98,32 +100,12 @@ export class PasswordRecoveryService {
       token,
       AuthTokenType.PASSWORD_RESET,
     );
-
-    if (!authToken) {
-      await this.sessionAuditService.recordSecurityEvent(
-        SessionEventType.PASSWORD_RESET_INVALID,
-        request,
-      );
-      return { status: PasswordResetStatus.INVALID };
-    }
-
-    if (authToken.consumedAt) {
-      await this.sessionAuditService.recordSecurityEvent(
-        SessionEventType.PASSWORD_RESET_REUSED,
-        request,
-        authToken.userId,
-      );
-      return { status: PasswordResetStatus.ALREADY_USED };
-    }
-
-    if (authToken.expiresAt <= new Date()) {
-      await this.sessionAuditService.recordSecurityEvent(
-        SessionEventType.PASSWORD_RESET_EXPIRED,
-        request,
-        authToken.userId,
-      );
-      return { status: PasswordResetStatus.EXPIRED };
-    }
+    const rejection = await this.classifyAndAuditResetToken(
+      authToken,
+      request,
+      new Date(),
+    );
+    if (rejection) return { status: rejection };
 
     const passwordHash = await this.userService.hashPassword(password);
     const result = await this.prisma.$transaction(async (transaction) => {
@@ -133,39 +115,13 @@ export class PasswordRecoveryService {
         token,
         AuthTokenType.PASSWORD_RESET,
       );
-
-      if (!current) {
-        await this.sessionAuditService.recordSecurityEvent(
-          SessionEventType.PASSWORD_RESET_INVALID,
-          request,
-          undefined,
-          undefined,
-          transaction,
-        );
-        return PasswordResetStatus.INVALID;
-      }
-
-      if (current.consumedAt) {
-        await this.sessionAuditService.recordSecurityEvent(
-          SessionEventType.PASSWORD_RESET_REUSED,
-          request,
-          current.userId,
-          undefined,
-          transaction,
-        );
-        return PasswordResetStatus.ALREADY_USED;
-      }
-
-      if (current.expiresAt <= now) {
-        await this.sessionAuditService.recordSecurityEvent(
-          SessionEventType.PASSWORD_RESET_EXPIRED,
-          request,
-          current.userId,
-          undefined,
-          transaction,
-        );
-        return PasswordResetStatus.EXPIRED;
-      }
+      const rejection = await this.classifyAndAuditResetToken(
+        current,
+        request,
+        now,
+        transaction,
+      );
+      if (rejection) return rejection;
 
       const consumed = await transaction.authToken.updateMany({
         where: {
@@ -220,5 +176,47 @@ export class PasswordRecoveryService {
     }
 
     return { status: result };
+  }
+
+  private async classifyAndAuditResetToken(
+    authToken: AuthToken | null,
+    request: Request,
+    now: Date,
+    client?: Prisma.TransactionClient,
+  ): Promise<PasswordResetStatus | null> {
+    if (!authToken) {
+      await this.sessionAuditService.recordSecurityEvent(
+        SessionEventType.PASSWORD_RESET_INVALID,
+        request,
+        undefined,
+        undefined,
+        client,
+      );
+      return PasswordResetStatus.INVALID;
+    }
+
+    if (authToken.consumedAt) {
+      await this.sessionAuditService.recordSecurityEvent(
+        SessionEventType.PASSWORD_RESET_REUSED,
+        request,
+        authToken.userId,
+        undefined,
+        client,
+      );
+      return PasswordResetStatus.ALREADY_USED;
+    }
+
+    if (authToken.expiresAt <= now) {
+      await this.sessionAuditService.recordSecurityEvent(
+        SessionEventType.PASSWORD_RESET_EXPIRED,
+        request,
+        authToken.userId,
+        undefined,
+        client,
+      );
+      return PasswordResetStatus.EXPIRED;
+    }
+
+    return null;
   }
 }

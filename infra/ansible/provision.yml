@@ -1,6 +1,6 @@
 ---
-- name: Provision Pixaeron application VPS
-  hosts: application_vps
+- name: Provision Pixaeron VPS hosts
+  hosts: application_vps:worker_vps
   become: true
   gather_facts: true
 
@@ -128,6 +128,7 @@
         owner: root
         group: root
         mode: '0755'
+      when: "'application_vps' in group_names"
 
     - name: Download the AWS PostgreSQL CA bundle
       ansible.builtin.get_url:
@@ -136,6 +137,7 @@
         owner: root
         group: root
         mode: '0644'
+      when: "'application_vps' in group_names"
 
     - name: Inspect the swap file
       ansible.builtin.stat:

@@ -3,6 +3,7 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ClientGrpc } from '@nestjs/microservices';
 import {
+  COMMAND_SECRET_METADATA_KEY,
   ENTITLEMENTS_SERVICE_NAME,
   type EntitlementsServiceClient,
   type GetEntitlementRequest,
@@ -11,7 +12,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 
 export const ENTITLEMENTS_GRPC_CLIENT = Symbol('ENTITLEMENTS_GRPC_CLIENT');
-export const COMMAND_SECRET_METADATA_KEY = 'x-pixaeron-command-secret';
+export { COMMAND_SECRET_METADATA_KEY };
 
 @Injectable()
 export class EntitlementsClient implements OnModuleInit {

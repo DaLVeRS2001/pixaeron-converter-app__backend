@@ -53,7 +53,6 @@ export class UserService {
     password: string,
     passwordHash: string | null | undefined,
   ): Promise<boolean> {
-    // Keep unknown and passwordless accounts on the same bcrypt path as local accounts.
     const expectedHash = passwordHash ?? (await this.invalidPasswordHash);
     return compare(password, expectedHash);
   }

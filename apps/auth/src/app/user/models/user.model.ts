@@ -1,8 +1,10 @@
-import { AbstractModel } from '@pixaeron/graphql';
-import { Field, ObjectType } from '@pixaeron/graphql';
+import { Field, ID, ObjectType } from '@pixaeron/graphql';
 
 @ObjectType()
-export class User extends AbstractModel {
+export class User {
+  @Field(() => ID)
+  id!: number;
+
   @Field()
   email!: string;
 

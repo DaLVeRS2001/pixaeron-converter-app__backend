@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  PAID_LARGE_QUEUE,
+  TIER_QUEUES,
+  type ConversionRequestMessage,
+} from '@pixaeron/conversion-contract';
+import {
   EntitlementPlanCode,
   type EntitlementSnapshot,
 } from '@pixaeron/entitlements-contract';
@@ -20,17 +25,12 @@ import {
   type ConversionFile,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  isUniqueConstraintError,
-  type Transaction,
-} from '../prisma/prisma.support';
+import { isUniqueConstraintError } from '../prisma/prisma.support';
 
 const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 const OUTPUT_RETENTION_MS = 48 * 60 * 60 * 1000;
 
-export const PLAN_CODES: Partial<
-  Record<EntitlementPlanCode, ConversionPlanCode>
-> = {
+const PLAN_CODES: Partial<Record<EntitlementPlanCode, ConversionPlanCode>> = {
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS]:
     ConversionPlanCode.ANONYMOUS,
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_FREE]: ConversionPlanCode.FREE,
@@ -38,13 +38,17 @@ export const PLAN_CODES: Partial<
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_PRO]: ConversionPlanCode.PRO,
 };
 
-const TIER_QUEUES: Record<number, string> = {
-  0: 'pixaeron-conversion-anon',
-  1: 'pixaeron-conversion-free',
-  2: 'pixaeron-conversion-light',
-  3: 'pixaeron-conversion-pro',
+export const planCodeFor = (
+  snapshot: EntitlementSnapshot,
+): ConversionPlanCode => {
+  const planCode = PLAN_CODES[snapshot.planCode];
+  if (!planCode) {
+    throw new Error(`Unmapped entitlement plan code ${snapshot.planCode}`);
+  }
+
+  return planCode;
 };
-const PAID_LARGE_QUEUE = 'pixaeron-conversion-paid-large';
+
 const FIRST_PAID_TIER = 2;
 
 export type AdmissionErrorCode =
@@ -97,7 +101,7 @@ type ClaimedFile = {
 
 @Injectable()
 export class AdmissionService {
-  private readonly largeFileBytes: number;
+  readonly largeFileBytes: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -116,10 +120,7 @@ export class AdmissionService {
       throw new AdmissionError('BATCH_SIZE_INVALID');
     }
 
-    const planCode = PLAN_CODES[snapshot.planCode];
-    if (!planCode) {
-      throw new Error(`Unmapped entitlement plan code ${snapshot.planCode}`);
-    }
+    const planCode = planCodeFor(snapshot);
 
     const batchId = randomUUID();
     const batchToken = input.anonymous
@@ -154,7 +155,11 @@ export class AdmissionService {
 
       return { batch, files: batch.files, batchToken, replayed: false };
     } catch (error) {
-      if (!isBatchUniqueViolation(error)) throw error;
+      const conflictsOnBatch =
+        isUniqueConstraintError(error) &&
+        (error as Prisma.PrismaClientKnownRequestError).meta?.['modelName'] ===
+          'ConversionBatch';
+      if (!conflictsOnBatch) throw error;
 
       const existing = await this.prisma.conversionBatch.findUnique({
         where: {
@@ -238,7 +243,7 @@ export class AdmissionService {
       }
 
       for (const file of claimed) {
-        if (file.input_bytes === null) {
+        if (file.input_bytes === null || file.input_etag === null) {
           throw new AdmissionError('FILE_NOT_MEASURED');
         }
         if (Number(file.input_bytes) > snapshot.maxFileBytes) {
@@ -247,12 +252,24 @@ export class AdmissionService {
       }
 
       if (snapshot.dailyFiles !== undefined) {
-        await this.reserveDailyQuota(
-          transaction,
-          batch.subject,
-          claimed.length,
-          snapshot.dailyFiles,
-        );
+        if (claimed.length > snapshot.dailyFiles) {
+          throw new AdmissionError('DAILY_QUOTA_EXCEEDED');
+        }
+
+        const reserved = await transaction.$queryRaw<
+          Array<{ subject: string }>
+        >`
+          INSERT INTO "daily_usage" ("subject", "usage_date", "admitted_files", "updated_at")
+          VALUES (${batch.subject}, (now() AT TIME ZONE 'utc')::date, ${claimed.length}, now())
+          ON CONFLICT ("subject", "usage_date") DO UPDATE
+            SET "admitted_files" = "daily_usage"."admitted_files" + ${claimed.length},
+                "updated_at" = now()
+            WHERE "daily_usage"."admitted_files" + ${claimed.length} <= ${snapshot.dailyFiles}
+          RETURNING "subject"
+        `;
+        if (reserved.length === 0) {
+          throw new AdmissionError('DAILY_QUOTA_EXCEEDED');
+        }
       }
 
       const retentionExpiresAt = new Date(Date.now() + OUTPUT_RETENTION_MS);
@@ -280,15 +297,24 @@ export class AdmissionService {
         throw new AdmissionError('BATCH_NOT_ADMITTABLE');
       }
 
+      const tierQueue = TIER_QUEUES[snapshot.queueTier];
+      if (!tierQueue) {
+        throw new Error(`Unmapped queue tier ${snapshot.queueTier}`);
+      }
+
       await transaction.outboxEvent.createMany({
         data: claimed.map((file) => ({
-          queue: this.queueFor(snapshot.queueTier, Number(file.input_bytes)),
+          queue:
+            snapshot.queueTier >= FIRST_PAID_TIER &&
+            Number(file.input_bytes) > this.largeFileBytes
+              ? PAID_LARGE_QUEUE
+              : tierQueue,
           payload: {
             fileId: file.id,
             batchId: batch.id,
             inputObjectKey: file.input_object_key,
-            inputEtag: file.input_etag,
-          },
+            inputEtag: file.input_etag as string,
+          } satisfies ConversionRequestMessage,
         })),
       });
 
@@ -312,42 +338,6 @@ export class AdmissionService {
     `;
 
     return Math.max(0, dailyFiles - (rows[0]?.admitted_files ?? 0));
-  }
-
-  private async reserveDailyQuota(
-    transaction: Transaction,
-    subject: string,
-    requested: number,
-    dailyFiles: number,
-  ): Promise<void> {
-    if (requested > dailyFiles) {
-      throw new AdmissionError('DAILY_QUOTA_EXCEEDED');
-    }
-
-    const reserved = await transaction.$queryRaw<Array<{ subject: string }>>`
-      INSERT INTO "daily_usage" ("subject", "usage_date", "admitted_files", "updated_at")
-      VALUES (${subject}, (now() AT TIME ZONE 'utc')::date, ${requested}, now())
-      ON CONFLICT ("subject", "usage_date") DO UPDATE
-        SET "admitted_files" = "daily_usage"."admitted_files" + ${requested},
-            "updated_at" = now()
-        WHERE "daily_usage"."admitted_files" + ${requested} <= ${dailyFiles}
-      RETURNING "subject"
-    `;
-
-    if (reserved.length === 0) {
-      throw new AdmissionError('DAILY_QUOTA_EXCEEDED');
-    }
-  }
-
-  private queueFor(queueTier: number, inputBytes: number): string {
-    if (queueTier >= FIRST_PAID_TIER && inputBytes > this.largeFileBytes) {
-      return PAID_LARGE_QUEUE;
-    }
-
-    const queue = TIER_QUEUES[queueTier];
-    if (!queue) throw new Error(`Unmapped queue tier ${queueTier}`);
-
-    return queue;
   }
 
   private assertOwnership(
@@ -377,12 +367,4 @@ export class AdmissionService {
 
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
-}
-
-function isBatchUniqueViolation(error: unknown): boolean {
-  return (
-    isUniqueConstraintError(error) &&
-    (error as Prisma.PrismaClientKnownRequestError).meta?.['modelName'] ===
-      'ConversionBatch'
-  );
 }

@@ -14,13 +14,14 @@ COPY package.json package-lock.json nx.json tsconfig.base.json ./
 COPY webpack.app.config.js ./
 COPY apps/auth/package.json ./apps/auth/package.json
 COPY libs ./libs
+COPY tools ./tools
 
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --workspaces --include-workspace-root
 
 COPY apps/auth ./apps/auth
 
-RUN find libs/notifications-contract/src/generated -type f -exec chmod 0644 {} + \
+RUN find libs -path '*/src/generated/*' -type f -exec chmod 0644 {} + \
   && npx nx run auth:prune
 
 FROM node:24-bookworm-slim AS runner

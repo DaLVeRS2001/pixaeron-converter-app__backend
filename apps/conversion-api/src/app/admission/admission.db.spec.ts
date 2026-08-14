@@ -104,7 +104,11 @@ describe('AdmissionService on Postgres', () => {
     batchIds.push(created.batch.id);
     await prisma.conversionFile.updateMany({
       where: { batchId: created.batch.id },
-      data: { status: ConversionFileStatus.READY, inputBytes },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes,
+        inputEtag: 'etag',
+      },
     });
     return created;
   };
@@ -215,7 +219,11 @@ describe('AdmissionService on Postgres', () => {
 
     await prisma.conversionFile.update({
       where: { id: firstFile.id },
-      data: { status: ConversionFileStatus.READY, inputBytes: 1024 },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes: 1024,
+        inputEtag: 'etag',
+      },
     });
     const first = await service.admitReadyFiles(
       created.batch.id,
@@ -226,7 +234,11 @@ describe('AdmissionService on Postgres', () => {
 
     await prisma.conversionFile.update({
       where: { id: secondFile.id },
-      data: { status: ConversionFileStatus.READY, inputBytes: 1024 },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes: 1024,
+        inputEtag: 'etag',
+      },
     });
     const second = await service.admitReadyFiles(
       created.batch.id,

@@ -11,7 +11,10 @@ import {
   AuthenticatedUser,
   authenticatedUserSelect,
 } from '../../user/prisma/user.select';
-import { SessionAuditService } from '../audit/session-audit.service';
+import {
+  SessionAuditService,
+  type SessionStartedEventType,
+} from '../audit/session-audit.service';
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_REUSE_GRACE_MS,
@@ -27,8 +30,6 @@ import {
   type ParsedRefreshToken,
   SessionTokenService,
 } from './session-token.service';
-
-type SessionStartedEventType = 'LOGIN_SUCCESS' | 'REGISTER_SUCCESS';
 
 export class SessionCredentialChangedError extends Error {}
 

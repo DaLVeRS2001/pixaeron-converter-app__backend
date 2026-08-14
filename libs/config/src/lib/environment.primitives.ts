@@ -1,6 +1,29 @@
 import * as Joi from 'joi';
 
+export const awsAccessKeyId = Joi.string().trim().min(16).max(128).required();
+
+export const awsAccountId = Joi.string()
+  .pattern(/^\d{12}$/)
+  .required();
+
+export const awsRegion = Joi.string().valid('eu-central-1').required();
+
+export const awsSecretAccessKey = Joi.string()
+  .trim()
+  .min(40)
+  .max(256)
+  .required();
+
 export const booleanValue = Joi.string().valid('true', 'false').required();
+
+export const s3BucketName = Joi.string()
+  .trim()
+  .pattern(/^[a-z0-9.-]{3,63}$/)
+  .required();
+
+export const sqsQueueSuffix = Joi.string()
+  .pattern(/^-[a-z0-9-]{1,32}$/)
+  .optional();
 
 export const nodeEnvironment = Joi.string()
   .valid('development', 'test', 'production')
@@ -51,15 +74,19 @@ export const grpcAddress = Joi.string()
     'grpc.address': '{{#label}} must be a valid gRPC host:port address',
   });
 
+export function parseCorsOrigins(value: string): string[] {
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 export const corsOrigins = Joi.string()
   .trim()
   .min(1)
   .required()
   .custom((value: string, helpers) => {
-    const origins = value
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean);
+    const origins = parseCorsOrigins(value);
 
     if (origins.length === 0) return helpers.error('cors.empty');
 

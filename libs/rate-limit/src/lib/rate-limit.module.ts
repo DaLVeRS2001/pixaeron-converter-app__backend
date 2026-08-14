@@ -7,10 +7,12 @@ import {
 } from '@nestjs-redis/throttler-storage';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { RedisToken, type RedisClientType } from '@pixaeron/redis';
-import { createHmac } from 'node:crypto';
 
 import { GqlThrottlerGuard } from './gql-throttler.guard';
-import { HttpRateLimitMiddleware } from './http-rate-limit.middleware';
+import {
+  hashClientIp,
+  HttpRateLimitMiddleware,
+} from './http-rate-limit.middleware';
 import { RATE_LIMIT_OPTIONS } from './rate-limit.options';
 import type { RateLimitOptions } from './rate-limit.options';
 
@@ -27,20 +29,21 @@ export class RateLimitModule {
           useFactory: (
             redis: RedisClientType,
             configService: ConfigService,
-          ) => ({
-            throttlers: options.throttlers,
-            getTracker: (request) =>
-              `${options.namespace}:${createHmac(
-                'sha256',
-                configService.getOrThrow(options.ipHashSecretConfigKey),
-              )
-                .update(request['ip'] ?? 'unknown')
-                .digest('hex')}`,
-            storage: new RedisThrottlerStorage(
-              redis,
-              ThrottlerAlgorithm.SlidingWindowCounter,
-            ),
-          }),
+          ) => {
+            const ipHashSecret = configService.getOrThrow<string>(
+              options.ipHashSecretConfigKey,
+            );
+
+            return {
+              throttlers: options.throttlers,
+              getTracker: (request) =>
+                `${options.namespace}:${hashClientIp(ipHashSecret, request)}`,
+              storage: new RedisThrottlerStorage(
+                redis,
+                ThrottlerAlgorithm.SlidingWindowCounter,
+              ),
+            };
+          },
         }),
       ],
       providers: [

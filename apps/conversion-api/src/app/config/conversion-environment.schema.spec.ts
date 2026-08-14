@@ -9,6 +9,7 @@ const validEnvironment: Record<string, string> = {
   IP_HASH_SECRET: 'conversion-ip-hash-secret-32-chars-long',
   CORS_ORIGINS: 'http://localhost:3000',
   AWS_REGION: 'eu-central-1',
+  AWS_ACCOUNT_ID: '123456789012',
   AWS_ACCESS_KEY_ID: 'AKIAEXAMPLEEXAMPLE',
   AWS_SECRET_ACCESS_KEY: 'example-secret-access-key-that-is-40-characters',
   CONVERSION_S3_BUCKET: 'pixaeron-conversion-dev',
@@ -72,5 +73,17 @@ describe('conversionEnvironmentSchema', () => {
 
   it('rejects a wildcard CORS origin', () => {
     expect(validate({ CORS_ORIGINS: '*' }).error).toBeDefined();
+  });
+
+  it.each([
+    ['a non-numeric account id', 'account'],
+    ['a short account id', '12345678901'],
+  ])('rejects %s', (_case, value) => {
+    expect(validate({ AWS_ACCOUNT_ID: value }).error).toBeDefined();
+  });
+
+  it('accepts a -dev queue suffix and rejects a bare one', () => {
+    expect(validate({ SQS_QUEUE_SUFFIX: '-dev' }).error).toBeUndefined();
+    expect(validate({ SQS_QUEUE_SUFFIX: 'dev' }).error).toBeDefined();
   });
 });

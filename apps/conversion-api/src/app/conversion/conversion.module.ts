@@ -11,6 +11,7 @@ import {
   EntitlementsClient,
 } from '../entitlements/entitlements.client';
 import { AnonymousIdentityService } from '../identity/anonymous-identity.service';
+import { OutboxPublisherService } from '../outbox/outbox-publisher.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InputObjectStorageService } from '../storage/input-object-storage.service';
 import { ConversionResolver } from './conversion.resolver';
@@ -52,6 +53,7 @@ const entitlementsProtoPath = join(
     AnonymousIdentityService,
     EntitlementsClient,
     InputObjectStorageService,
+    OutboxPublisherService,
     UploadCompletionService,
   ],
 })

@@ -1,10 +1,16 @@
 import {
+  awsAccessKeyId,
+  awsAccountId,
+  awsRegion,
+  awsSecretAccessKey,
   corsOrigins,
   grpcAddress,
   nodeEnvironment,
   port,
   postgresUrl,
+  s3BucketName,
   secret,
+  sqsQueueSuffix,
 } from '@pixaeron/config';
 import * as Joi from 'joi';
 
@@ -17,13 +23,12 @@ export const conversionEnvironmentSchema = Joi.object({
     .required(),
   IP_HASH_SECRET: secret,
   CORS_ORIGINS: corsOrigins,
-  AWS_REGION: Joi.string().valid('eu-central-1').required(),
-  AWS_ACCESS_KEY_ID: Joi.string().trim().min(16).max(128).required(),
-  AWS_SECRET_ACCESS_KEY: Joi.string().trim().min(40).max(256).required(),
-  CONVERSION_S3_BUCKET: Joi.string()
-    .trim()
-    .pattern(/^[a-z0-9.-]{3,63}$/)
-    .required(),
+  AWS_REGION: awsRegion,
+  AWS_ACCOUNT_ID: awsAccountId,
+  AWS_ACCESS_KEY_ID: awsAccessKeyId,
+  AWS_SECRET_ACCESS_KEY: awsSecretAccessKey,
+  SQS_QUEUE_SUFFIX: sqsQueueSuffix,
+  CONVERSION_S3_BUCKET: s3BucketName,
   ENTITLEMENTS_GRPC_URL: grpcAddress.required(),
   ENTITLEMENTS_GRPC_DEADLINE_MS: Joi.number()
     .integer()

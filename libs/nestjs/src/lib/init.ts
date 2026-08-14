@@ -1,16 +1,14 @@
 import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { parseCorsOrigins } from '@pixaeron/config';
 import cookieParser = require('cookie-parser');
 
 export function configureHttp(app: INestApplication) {
   const configService = app.get(ConfigService);
-  const corsOrigins = configService
-    .getOrThrow<string>('CORS_ORIGINS')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const corsOrigins = parseCorsOrigins(
+    configService.getOrThrow<string>('CORS_ORIGINS'),
+  );
 
-  // Caddy overwrites X-Forwarded-For; Gateway propagates that single trusted value.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   app.enableCors({
