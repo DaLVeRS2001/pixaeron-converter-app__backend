@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { EntitlementSnapshot } from '@pixaeron/entitlements-contract';
 
-import {
-  ConversionFileStatus,
-  type ConversionBatch,
-} from '../../generated/prisma/client';
+import { ConversionFileStatus } from '../../generated/prisma/client';
 import { OutboxPublisherService } from '../outbox/outbox-publisher.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InputObjectStorageService } from '../storage/input-object-storage.service';
@@ -29,12 +26,14 @@ export class UploadCompletionService {
   ) {}
 
   async completeUploads(
-    batch: ConversionBatch,
+    batchId: string,
     ownership: BatchOwnership,
     snapshot: EntitlementSnapshot,
   ): Promise<UploadCompletion> {
+    await this.admission.getOwnedBatch(batchId, ownership);
+
     const uploading = await this.prisma.conversionFile.findMany({
-      where: { batchId: batch.id, status: ConversionFileStatus.UPLOADING },
+      where: { batchId, status: ConversionFileStatus.UPLOADING },
     });
 
     const verifications = await Promise.all(
@@ -57,7 +56,7 @@ export class UploadCompletionService {
     const verifiedFiles = verifications.reduce((sum, count) => sum + count, 0);
 
     const result = await this.admission.admitReadyFiles(
-      batch.id,
+      batchId,
       ownership,
       snapshot,
     );

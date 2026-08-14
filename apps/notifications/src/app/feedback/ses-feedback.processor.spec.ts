@@ -354,6 +354,7 @@ describe('SesFeedbackProcessor', () => {
         { lastEventFingerprint: { sort: 'desc', nulls: 'last' } },
       ],
       select: {
+        status: true,
         reasonCode: true,
         lastDeliveryId: true,
         lastEventId: true,

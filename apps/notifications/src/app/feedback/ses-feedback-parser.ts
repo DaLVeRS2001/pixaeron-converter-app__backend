@@ -105,7 +105,11 @@ export function createSesFeedbackFingerprint(
           'v1',
           event.sesMessageId,
           event.eventType,
-          eventSubtype(event),
+          event.eventType === 'DELIVERY_DELAY'
+            ? event.delayType
+            : event.eventType === 'REJECT'
+              ? event.reason
+              : '',
           event.providerTimestamp.toISOString(),
           recipientHash,
         ];
@@ -193,17 +197,6 @@ function validateSource(mail: JsonObject, expected: SesFeedbackSource): void {
   }
   if (readString(mail, 'sourceArn') !== expected.sourceArn) {
     invalid('mail.sourceArn');
-  }
-}
-
-function eventSubtype(event: SesFeedback): string {
-  switch (event.eventType) {
-    case 'DELIVERY_DELAY':
-      return event.delayType;
-    case 'REJECT':
-      return event.reason;
-    default:
-      return '';
   }
 }
 

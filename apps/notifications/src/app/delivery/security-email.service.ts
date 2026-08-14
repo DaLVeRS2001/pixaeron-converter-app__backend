@@ -36,7 +36,6 @@ import {
 } from './recipient-hash.service';
 import { SesEmailService, type SesSubmissionResult } from './ses-email.service';
 
-// Keep reconciliation behind the SES abort timeout, including final DB writes.
 const DELIVERY_LEASE_MARGIN_MS = 1_000;
 const RESULT_POLL_MS = 50;
 
@@ -194,8 +193,6 @@ export class SecurityEmailService {
       });
     }
 
-    // This is a transient duplicate response. Persisting it would prevent the
-    // command owner from recording the eventual provider result.
     return unknownResponse('COMMAND_IN_PROGRESS');
   }
 
@@ -298,7 +295,7 @@ export class SecurityEmailService {
       await transaction.emailDelivery.updateMany({
         where: { id: deliveryId, callerResult: null },
         data: {
-          callerResult: toCommandResult(submission.status),
+          callerResult: EmailCommandResult[submission.status],
           callerResultCode: 'code' in submission ? submission.code : null,
           leaseExpiresAt: null,
           finalizedAt: now,
@@ -348,7 +345,7 @@ export class SecurityEmailService {
     await transaction.emailDelivery.updateMany({
       where: { id: deliveryId, status: { in: replaceableStatuses } },
       data: {
-        status: toDeliveryStatus(submission.status),
+        status: EmailDeliveryStatus[submission.status],
         failureCode: 'code' in submission ? submission.code : null,
         leaseExpiresAt: null,
       },
@@ -392,18 +389,6 @@ function toEmailPurpose(request: SendSecurityEmailRequest): EmailPurpose {
     SecurityEmailPurpose.SECURITY_EMAIL_PURPOSE_EMAIL_VERIFICATION
     ? EmailPurpose.EMAIL_VERIFICATION
     : EmailPurpose.PASSWORD_RESET;
-}
-
-function toCommandResult(
-  status: SesSubmissionResult['status'],
-): EmailCommandResult {
-  return EmailCommandResult[status];
-}
-
-function toDeliveryStatus(
-  status: SesSubmissionResult['status'],
-): EmailDeliveryStatus {
-  return EmailDeliveryStatus[status];
 }
 
 function createTokenFingerprint(token: string): string {

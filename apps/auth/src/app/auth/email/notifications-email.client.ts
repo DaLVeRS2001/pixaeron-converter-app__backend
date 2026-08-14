@@ -3,6 +3,7 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ClientGrpc } from '@nestjs/microservices';
 import {
+  COMMAND_SECRET_METADATA_KEY,
   NOTIFICATIONS_EMAIL_SERVICE_NAME,
   type NotificationsEmailServiceClient,
   type SendSecurityEmailRequest,
@@ -11,7 +12,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 
 export const NOTIFICATIONS_GRPC_CLIENT = Symbol('NOTIFICATIONS_GRPC_CLIENT');
-export const COMMAND_SECRET_METADATA_KEY = 'x-pixaeron-command-secret';
+export { COMMAND_SECRET_METADATA_KEY };
 
 const DEFAULT_NOTIFICATIONS_GRPC_DEADLINE_MS = 2_000;
 

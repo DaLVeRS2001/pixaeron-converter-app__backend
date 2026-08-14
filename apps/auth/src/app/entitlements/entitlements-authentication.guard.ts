@@ -6,9 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RpcException } from '@nestjs/microservices';
+import { COMMAND_SECRET_METADATA_KEY } from '@pixaeron/entitlements-contract';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-export const COMMAND_SECRET_METADATA_KEY = 'x-pixaeron-command-secret';
+export { COMMAND_SECRET_METADATA_KEY };
 
 @Injectable()
 export class EntitlementsAuthenticationGuard implements CanActivate {

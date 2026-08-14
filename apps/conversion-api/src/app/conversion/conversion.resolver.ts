@@ -22,7 +22,7 @@ import {
 import {
   AdmissionError,
   AdmissionService,
-  PLAN_CODES,
+  planCodeFor,
   type AdmissionErrorCode,
   type BatchOwnership,
 } from '../admission/admission.service';
@@ -67,7 +67,7 @@ export class ConversionResolver {
     @Args('input') input: CreateConversionBatchInput,
     @Context() context: HttpContext,
   ): Promise<ConversionBatch> {
-    const snapshot = await this.anonymousSnapshot();
+    const snapshot = await this.anonymousSnapshotCappedToServedSizes();
 
     try {
       const created = await this.admission.createBatch(
@@ -98,19 +98,15 @@ export class ConversionResolver {
     @Args('input') input: CompleteConversionUploadsInput,
     @Context() context: HttpContext,
   ): Promise<CompleteConversionUploadsPayload> {
-    const snapshot = await this.anonymousSnapshot();
+    const snapshot = await this.anonymousSnapshotCappedToServedSizes();
     const ownership: BatchOwnership = {
       subject: this.subjectFrom(context),
       batchToken: input.batchToken,
     };
 
     try {
-      const batch = await this.admission.getOwnedBatch(
-        input.batchId,
-        ownership,
-      );
       const completion = await this.uploadCompletion.completeUploads(
-        batch,
+        input.batchId,
         ownership,
         snapshot,
       );
@@ -158,14 +154,10 @@ export class ConversionResolver {
   async conversionEntitlement(
     @Context() context: HttpContext,
   ): Promise<ConversionEntitlement> {
-    const snapshot = await this.anonymousSnapshot();
-    const planCode = PLAN_CODES[snapshot.planCode];
-    if (!planCode) {
-      throw new Error(`Unmapped entitlement plan code ${snapshot.planCode}`);
-    }
+    const snapshot = await this.anonymousSnapshotCappedToServedSizes();
 
     return {
-      planCode,
+      planCode: planCodeFor(snapshot),
       maxBatchFiles: snapshot.maxBatchFiles,
       maxFileBytes: snapshot.maxFileBytes,
       dailyFiles: snapshot.dailyFiles ?? null,
@@ -180,7 +172,7 @@ export class ConversionResolver {
     };
   }
 
-  private async anonymousSnapshot(): Promise<EntitlementSnapshot> {
+  private async anonymousSnapshotCappedToServedSizes(): Promise<EntitlementSnapshot> {
     const response = await this.entitlements.getEntitlement({
       planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
     });
@@ -188,7 +180,13 @@ export class ConversionResolver {
       throw new Error('Entitlement response carried no snapshot');
     }
 
-    return response.snapshot;
+    return {
+      ...response.snapshot,
+      maxFileBytes: Math.min(
+        response.snapshot.maxFileBytes,
+        this.admission.largeFileBytes,
+      ),
+    };
   }
 
   private subjectFrom(context: HttpContext): string {
@@ -211,44 +209,32 @@ export class ConversionResolver {
       expiresAt: batch.expiresAt,
       batchToken,
       files: await Promise.all(
-        files.map(async (file) => this.toFileModel(file, snapshot)),
+        files.map(async (file): Promise<ConversionFile> => {
+          const presignable =
+            snapshot !== null && file.status === ConversionFileStatus.UPLOADING;
+          const target = presignable
+            ? await this.storage.presignUpload(
+                file.inputObjectKey,
+                snapshot.maxFileBytes,
+              )
+            : null;
+
+          return {
+            id: file.id,
+            status: file.status,
+            inputBytes:
+              file.inputBytes === null ? null : Number(file.inputBytes),
+            resultKind: file.resultKind,
+            upload: target && {
+              url: target.url,
+              fields: Object.entries(target.fields).map(([name, value]) => ({
+                name,
+                value,
+              })),
+            },
+          };
+        }),
       ),
-    };
-  }
-
-  private async toFileModel(
-    file: ConversionFileRow,
-    snapshot: EntitlementSnapshot | null,
-  ): Promise<ConversionFile> {
-    const presignable =
-      snapshot !== null && file.status === ConversionFileStatus.UPLOADING;
-
-    return {
-      id: file.id,
-      status: file.status,
-      inputBytes: file.inputBytes === null ? null : Number(file.inputBytes),
-      resultKind: file.resultKind,
-      upload: presignable
-        ? await this.uploadTargetFor(file.inputObjectKey, snapshot)
-        : null,
-    };
-  }
-
-  private async uploadTargetFor(
-    inputObjectKey: string,
-    snapshot: EntitlementSnapshot,
-  ) {
-    const target = await this.storage.presignUpload(
-      inputObjectKey,
-      snapshot.maxFileBytes,
-    );
-
-    return {
-      url: target.url,
-      fields: Object.entries(target.fields).map(([name, value]) => ({
-        name,
-        value,
-      })),
     };
   }
 }

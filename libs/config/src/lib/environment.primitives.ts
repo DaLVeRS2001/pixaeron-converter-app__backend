@@ -74,15 +74,19 @@ export const grpcAddress = Joi.string()
     'grpc.address': '{{#label}} must be a valid gRPC host:port address',
   });
 
+export function parseCorsOrigins(value: string): string[] {
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 export const corsOrigins = Joi.string()
   .trim()
   .min(1)
   .required()
   .custom((value: string, helpers) => {
-    const origins = value
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean);
+    const origins = parseCorsOrigins(value);
 
     if (origins.length === 0) return helpers.error('cors.empty');
 

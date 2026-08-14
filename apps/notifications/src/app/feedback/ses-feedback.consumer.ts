@@ -15,6 +15,7 @@ import {
   type Message,
   type SQSClient,
 } from '@aws-sdk/client-sqs';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   ConflictingSesFeedbackError,
@@ -114,7 +115,7 @@ export class SesFeedbackConsumer
         if (!this.running || isAbortError(error)) break;
 
         this.logger.error('SES feedback poll category=retry.');
-        await wait(RETRY_DELAY_MS);
+        await delay(RETRY_DELAY_MS);
       } finally {
         this.receiveAbortController = undefined;
       }
@@ -161,8 +162,4 @@ function isFeedbackValidationError(error: unknown): boolean {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
-}
-
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

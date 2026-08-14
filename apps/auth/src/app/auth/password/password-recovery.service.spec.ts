@@ -278,6 +278,9 @@ describe('PasswordRecoveryService', () => {
     expect(sessionAuditService.recordSecurityEvent).toHaveBeenCalledWith(
       'PASSWORD_RESET_INVALID',
       request,
+      undefined,
+      undefined,
+      undefined,
     );
   });
 
@@ -304,6 +307,8 @@ describe('PasswordRecoveryService', () => {
       'PASSWORD_RESET_REUSED',
       request,
       1,
+      undefined,
+      undefined,
     );
     expect(sessionService.completePasswordChange).not.toHaveBeenCalled();
   });
@@ -331,6 +336,8 @@ describe('PasswordRecoveryService', () => {
       'PASSWORD_RESET_EXPIRED',
       request,
       1,
+      undefined,
+      undefined,
     );
     expect(sessionService.completePasswordChange).not.toHaveBeenCalled();
   });

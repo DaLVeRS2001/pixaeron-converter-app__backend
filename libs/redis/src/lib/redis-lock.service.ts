@@ -3,7 +3,7 @@ import { InjectRedis } from '@nestjs-redis/client';
 import { randomUUID } from 'node:crypto';
 import type { RedisClientType } from 'redis';
 
-import { REDIS_NAMESPACE } from './redis-options';
+export const REDIS_NAMESPACE = Symbol('REDIS_NAMESPACE');
 
 const RELEASE_LOCK_SCRIPT = `
   if redis.call('GET', KEYS[1]) == ARGV[1] then

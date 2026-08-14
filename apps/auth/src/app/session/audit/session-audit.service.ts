@@ -8,7 +8,7 @@ import {
   SessionRequestMetadata,
 } from '../services/session-metadata.service';
 
-type SessionStartedEventType = 'LOGIN_SUCCESS' | 'REGISTER_SUCCESS';
+export type SessionStartedEventType = 'LOGIN_SUCCESS' | 'REGISTER_SUCCESS';
 type SessionEventClient = Pick<Prisma.TransactionClient, 'sessionEvent'>;
 
 @Injectable()

@@ -1,12 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const bufCli = require.resolve('@bufbuild/buf/bin/buf');
-const projectRoot = resolve(import.meta.dirname, '..');
+const projectRoot = process.cwd();
 const workspaceRoot = resolve(projectRoot, '../..');
-const contractPath = 'libs/notifications-contract';
+const contractPath = relative(workspaceRoot, projectRoot).split(sep).join('/');
 const baseRef = process.env.NX_BASE?.trim() || 'main';
 
 function runGit(args) {
@@ -40,7 +40,7 @@ const hasBaseline = baselineFiles
 
 if (!hasBaseline) {
   console.log(
-    `Skipping breaking check: ${baseRef} has no notification contract baseline.`,
+    `Skipping breaking check: ${baseRef} has no ${contractPath} baseline.`,
   );
   process.exit(0);
 }

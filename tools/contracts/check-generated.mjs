@@ -2,11 +2,12 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const bufCli = require.resolve('@bufbuild/buf/bin/buf');
-const projectRoot = resolve(import.meta.dirname, '..');
+const projectRoot = process.cwd();
+const contractName = basename(projectRoot);
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'pixaeron-contracts-'));
 
 function run(command, args) {
@@ -61,7 +62,7 @@ function checkContract() {
 
   if (diff.status === 1) {
     process.stderr.write(
-      'Generated notification contract is stale. Run: npm run contracts:generate\n',
+      `Generated ${contractName} contract is stale. Run: npx nx run ${contractName}:contracts-generate\n`,
     );
     process.stderr.write(diff.stdout);
     return 1;

@@ -7,7 +7,6 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 export class GqlThrottlerGuard extends ThrottlerGuard {
   protected override getRequestResponse(
     context: ExecutionContext,
-    // The protected Nest throttler contract itself uses Record<string, any>.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ): { req: Record<string, any>; res: Record<string, any> } {
     if (context.getType<string>() === 'graphql') {

@@ -2,6 +2,7 @@ import {
   EmailCommandResult,
   EmailDeliveryStatus,
   EmailDestinationStatus,
+  Prisma,
   type EmailDelivery,
   type EmailDeliveryEvent,
 } from '../../generated/prisma/client';
@@ -91,8 +92,6 @@ async function applyDeliveryTransition(
   };
 
   if (isTerminalMailboxEvent(feedback)) {
-    // Terminal mailbox evidence is sticky: it may supersede a newer
-    // nonterminal revision, and later nonterminal feedback cannot reactivate it.
     await transaction.emailDelivery.updateMany({
       where: {
         id: deliveryId,
@@ -180,35 +179,16 @@ async function convergeNonterminalAliases(
     OR: recipientAliases,
   };
 
-  const authoritativeDestination =
-    await transaction.emailDestination.findFirstOrThrow({
-      where: unblockedAliases,
-      orderBy: [
-        { lastEventAt: { sort: 'desc', nulls: 'last' } },
-        { lastEventRank: { sort: 'desc', nulls: 'last' } },
-        { lastEventFingerprint: { sort: 'desc', nulls: 'last' } },
-      ],
-      select: {
-        status: true,
-        reasonCode: true,
-        lastDeliveryId: true,
-        lastEventId: true,
-        lastEventAt: true,
-        lastEventRank: true,
-        lastEventFingerprint: true,
-      },
-    });
+  const authoritativeDestination = await findAuthoritativeDestination(
+    transaction,
+    unblockedAliases,
+  );
 
   await transaction.emailDestination.updateMany({
     where: unblockedAliases,
     data: {
       status: authoritativeDestination.status,
-      reasonCode: authoritativeDestination.reasonCode,
-      lastDeliveryId: authoritativeDestination.lastDeliveryId,
-      lastEventId: authoritativeDestination.lastEventId,
-      lastEventAt: authoritativeDestination.lastEventAt,
-      lastEventRank: authoritativeDestination.lastEventRank,
-      lastEventFingerprint: authoritativeDestination.lastEventFingerprint,
+      ...authoritativeDestinationData(authoritativeDestination),
     },
   });
 }
@@ -243,23 +223,10 @@ async function suppressDestinationAliases(
     );
   }
 
-  const authoritativeDestination =
-    await transaction.emailDestination.findFirstOrThrow({
-      where: { OR: recipientAliases },
-      orderBy: [
-        { lastEventAt: { sort: 'desc', nulls: 'last' } },
-        { lastEventRank: { sort: 'desc', nulls: 'last' } },
-        { lastEventFingerprint: { sort: 'desc', nulls: 'last' } },
-      ],
-      select: {
-        reasonCode: true,
-        lastDeliveryId: true,
-        lastEventId: true,
-        lastEventAt: true,
-        lastEventRank: true,
-        lastEventFingerprint: true,
-      },
-    });
+  const authoritativeDestination = await findAuthoritativeDestination(
+    transaction,
+    { OR: recipientAliases },
+  );
   const previousSuppressedAt = destinationState._min.suppressedAt;
   const earliestSuppressedAt =
     !previousSuppressedAt ||
@@ -271,16 +238,47 @@ async function suppressDestinationAliases(
     where: { OR: recipientAliases },
     data: {
       status: EmailDestinationStatus.SUPPRESSED,
-      reasonCode: authoritativeDestination.reasonCode,
+      ...authoritativeDestinationData(authoritativeDestination),
       suppressedAt: earliestSuppressedAt,
-      lastDeliveryId: authoritativeDestination.lastDeliveryId,
-      lastEventId: authoritativeDestination.lastEventId,
-      lastEventAt: authoritativeDestination.lastEventAt,
-      lastEventRank: authoritativeDestination.lastEventRank,
-      lastEventFingerprint: authoritativeDestination.lastEventFingerprint,
       suppressionRevision: nextSuppressionRevision,
     },
   });
+}
+
+async function findAuthoritativeDestination(
+  transaction: Transaction,
+  where: Prisma.EmailDestinationWhereInput,
+) {
+  return transaction.emailDestination.findFirstOrThrow({
+    where,
+    orderBy: [
+      { lastEventAt: { sort: 'desc', nulls: 'last' } },
+      { lastEventRank: { sort: 'desc', nulls: 'last' } },
+      { lastEventFingerprint: { sort: 'desc', nulls: 'last' } },
+    ],
+    select: {
+      status: true,
+      reasonCode: true,
+      lastDeliveryId: true,
+      lastEventId: true,
+      lastEventAt: true,
+      lastEventRank: true,
+      lastEventFingerprint: true,
+    },
+  });
+}
+
+function authoritativeDestinationData(
+  destination: Awaited<ReturnType<typeof findAuthoritativeDestination>>,
+) {
+  return {
+    reasonCode: destination.reasonCode,
+    lastDeliveryId: destination.lastDeliveryId,
+    lastEventId: destination.lastEventId,
+    lastEventAt: destination.lastEventAt,
+    lastEventRank: destination.lastEventRank,
+    lastEventFingerprint: destination.lastEventFingerprint,
+  };
 }
 
 async function suppressDestination(

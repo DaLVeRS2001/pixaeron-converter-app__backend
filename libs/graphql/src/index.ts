@@ -23,4 +23,3 @@ export {
   Resolver,
 } from '@nestjs/graphql';
 export { createGraphQLErrorFormatter } from './lib/format-graphql-error';
-export * from './lib/models';

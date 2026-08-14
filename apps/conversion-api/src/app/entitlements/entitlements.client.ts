@@ -3,6 +3,7 @@ import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ClientGrpc } from '@nestjs/microservices';
 import {
+  COMMAND_SECRET_METADATA_KEY,
   ENTITLEMENTS_SERVICE_NAME,
   type EntitlementsServiceClient,
   type GetEntitlementRequest,
@@ -11,13 +12,12 @@ import {
 import { firstValueFrom } from 'rxjs';
 
 export const ENTITLEMENTS_GRPC_CLIENT = Symbol('ENTITLEMENTS_GRPC_CLIENT');
-export const COMMAND_SECRET_METADATA_KEY = 'x-pixaeron-command-secret';
+export { COMMAND_SECRET_METADATA_KEY };
 
 @Injectable()
 export class EntitlementsClient implements OnModuleInit {
   private readonly deadlineMs: number;
   private readonly commandSecret: string | undefined;
-  private readonly largeFileBytes: number;
   private entitlementsService!: EntitlementsServiceClient;
 
   constructor(
@@ -31,9 +31,6 @@ export class EntitlementsClient implements OnModuleInit {
     this.commandSecret = configService.get<string>(
       'ENTITLEMENTS_COMMAND_SECRET',
     );
-    this.largeFileBytes = Number(
-      configService.getOrThrow<string>('CONVERSION_LARGE_FILE_BYTES'),
-    );
   }
 
   onModuleInit(): void {
@@ -43,7 +40,7 @@ export class EntitlementsClient implements OnModuleInit {
       );
   }
 
-  async getEntitlement(
+  getEntitlement(
     request: GetEntitlementRequest,
   ): Promise<GetEntitlementResponse> {
     const options: CallOptions = {
@@ -54,17 +51,8 @@ export class EntitlementsClient implements OnModuleInit {
       metadata.add(COMMAND_SECRET_METADATA_KEY, this.commandSecret);
     }
 
-    const response = await firstValueFrom(
+    return firstValueFrom(
       this.entitlementsService.getEntitlement(request, metadata, options),
     );
-
-    if (response.snapshot) {
-      response.snapshot.maxFileBytes = Math.min(
-        response.snapshot.maxFileBytes,
-        this.largeFileBytes,
-      );
-    }
-
-    return response;
   }
 }
