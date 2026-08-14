@@ -1,0 +1,41 @@
+name: pixaeron
+
+services:
+  conversion-worker:
+    image: ghcr.io/dalvers2001/pixaeron-conversion-worker:${CONVERSION_WORKER_IMAGE_TAG:-sha-not-configured}
+    restart: unless-stopped
+    env_file:
+      - path: ${CONVERSION_WORKER_RUNTIME_ENV_FILE:-/opt/pixaeron/conversion-worker.env}
+        format: raw
+    environment:
+      NODE_ENV: production
+      WORKER_PROGRESS_FILE: /tmp/pixaeron-worker-progress
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const { statSync } = require('node:fs');
+          const age = Date.now() - statSync(process.env.WORKER_PROGRESS_FILE).mtimeMs;
+          if (age > 120000) process.exit(1);
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'

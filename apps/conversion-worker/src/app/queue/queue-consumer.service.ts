@@ -20,6 +20,7 @@ import {
   type ConversionRequestMessage,
 } from '@pixaeron/conversion-contract';
 import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 
 import { ImageCompressorService } from '../pipeline/image-compressor.service';
 import {
@@ -34,7 +35,7 @@ const RECEIVE_WAIT_SECONDS = 20;
 const RETRY_DELAY_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 30_000;
 const CLAIM_VISIBILITY_SECONDS = 120;
-const HEARTBEAT_INTERVAL_MS = 45_000;
+const VISIBILITY_REFRESH_INTERVAL_MS = 45_000;
 const STARVATION_GRANT_PERIOD = 8;
 
 type Waiter = { priority: number; grant: () => void };
@@ -45,6 +46,7 @@ export class QueueConsumerService
 {
   private readonly logger = new Logger(QueueConsumerService.name);
   private readonly queueUrls: string[];
+  private readonly progressFile: string;
   private readonly shutdown = new AbortController();
   private running = false;
   private loops: Promise<void>[] = [];
@@ -64,6 +66,9 @@ export class QueueConsumerService
     const suffix = configService.get<string>('SQS_QUEUE_SUFFIX') ?? '';
     this.queueUrls = PRIORITY_TIERS.map((tier) =>
       queueUrl(region, accountId, queueForTier(tier), suffix),
+    );
+    this.progressFile = configService.getOrThrow<string>(
+      'WORKER_PROGRESS_FILE',
     );
   }
 
@@ -102,12 +107,14 @@ export class QueueConsumerService
         );
 
         consecutiveFailures = 0;
+        this.recordProgress();
 
         const message = response.Messages?.[0];
         if (!message?.ReceiptHandle) continue;
 
         const receiptHandle = message.ReceiptHandle;
-        const heartbeat = setInterval(() => {
+        const visibilityRefresh = setInterval(() => {
+          this.recordProgress();
           this.client
             .send(
               new ChangeMessageVisibilityCommand({
@@ -117,9 +124,9 @@ export class QueueConsumerService
               }),
             )
             .catch((error: Error) => {
-              this.logger.error(`Heartbeat failed: ${error.message}`);
+              this.logger.error(`Visibility refresh failed: ${error.message}`);
             });
-        }, HEARTBEAT_INTERVAL_MS);
+        }, VISIBILITY_REFRESH_INTERVAL_MS);
 
         try {
           await this.acquire(priority);
@@ -129,7 +136,7 @@ export class QueueConsumerService
             this.release();
           }
         } finally {
-          clearInterval(heartbeat);
+          clearInterval(visibilityRefresh);
         }
       } catch (error) {
         if (!this.running || this.shutdown.signal.aborted) break;
@@ -149,6 +156,12 @@ export class QueueConsumerService
         );
       }
     }
+  }
+
+  private recordProgress(): void {
+    writeFile(this.progressFile, '').catch((error: Error) => {
+      this.logger.error(`Progress file write failed: ${error.message}`);
+    });
   }
 
   private acquire(priority: number): Promise<void> {

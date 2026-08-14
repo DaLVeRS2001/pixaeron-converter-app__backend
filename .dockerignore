@@ -9,9 +9,9 @@ coverage
 tmp
 *.log
 
-.env
-.env.*
-!.env.example
+**/.env
+**/.env.*
+!**/.env.example
 
 docs
 docker-compose*.yaml

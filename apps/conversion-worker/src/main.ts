@@ -1,9 +1,13 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import sharp from 'sharp';
 
 import { AppModule } from './app/app.module';
 
 async function bootstrap(): Promise<void> {
+  sharp.cache(false);
+  sharp.concurrency(1);
+
   const app = await NestFactory.createApplicationContext(AppModule);
   app.enableShutdownHooks();
   Logger.log('Conversion worker is consuming the request queues');

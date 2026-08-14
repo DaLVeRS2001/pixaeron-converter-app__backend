@@ -1,5 +1,7 @@
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { QueueConsumerService } from './queue-consumer.service';
 import { InputIntegrityError } from '../storage/worker-object-storage.service';
@@ -7,6 +9,7 @@ import type { Message } from '@aws-sdk/client-sqs';
 
 const QUEUE_URL =
   'https://sqs.eu-central-1.amazonaws.com/123456789012/pixaeron-conversion-anon-dev';
+const progressFile = join(tmpdir(), `pixaeron-worker-spec-${randomUUID()}`);
 
 describe('QueueConsumerService', () => {
   let client: { send: jest.Mock; destroy: jest.Mock };
@@ -43,6 +46,7 @@ describe('QueueConsumerService', () => {
         AWS_REGION: 'eu-central-1',
         AWS_ACCOUNT_ID: '123456789012',
         SQS_QUEUE_SUFFIX: '-dev',
+        WORKER_PROGRESS_FILE: progressFile,
       }),
     );
   });

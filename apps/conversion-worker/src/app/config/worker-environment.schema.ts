@@ -32,4 +32,8 @@ export const workerEnvironmentSchema = Joi.object({
     .max(500_000_000)
     .required()
     .raw(),
+  WORKER_PROGRESS_FILE: Joi.string()
+    .trim()
+    .min(1)
+    .default('/tmp/pixaeron-worker-progress'),
 });
