@@ -1,28 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  IMAGE_FORMATS,
+  isMember,
+  type ConversionFailureCode,
+  type ConversionImageFormat,
+  type ConversionResultKindName,
+} from '@pixaeron/conversion-contract';
 import sharp, { type Metadata, type OutputInfo } from 'sharp';
-
-export type CompressionFailureCode =
-  | 'ANIMATED_UNSUPPORTED'
-  | 'DECODE_FAILED'
-  | 'INPUT_TOO_LARGE'
-  | 'PIXELS_EXCEEDED'
-  | 'UNSUPPORTED_FORMAT';
 
 export type CompressionResult =
   | {
       ok: true;
-      kind: 'SAVED' | 'NO_SAVINGS' | 'SANITIZED_LARGER';
+      kind: ConversionResultKindName;
       bytes: Buffer;
-      format: string;
+      format: ConversionImageFormat;
       contentType: string;
       frames: number;
       width: number;
       height: number;
     }
-  | { ok: false; failureCode: CompressionFailureCode };
+  | { ok: false; failureCode: ConversionFailureCode };
 
-const CONTENT_TYPES: Record<string, string> = {
+const CONTENT_TYPES: Record<ConversionImageFormat, string> = {
   jpeg: 'image/jpeg',
   png: 'image/png',
   webp: 'image/webp',
@@ -72,13 +72,16 @@ export class ImageCompressorService {
       return { ok: false, failureCode: 'DECODE_FAILED' };
     }
 
-    let format: string = metadata.format ?? '';
-    if (format === 'heif') {
-      format = metadata.compression === 'av1' ? 'avif' : '';
-    }
-    if (!(format in CONTENT_TYPES)) {
+    const detected =
+      metadata.format === 'heif'
+        ? metadata.compression === 'av1'
+          ? 'avif'
+          : ''
+        : (metadata.format ?? '');
+    if (!isMember(IMAGE_FORMATS, detected)) {
       return { ok: false, failureCode: 'UNSUPPORTED_FORMAT' };
     }
+    const format: ConversionImageFormat = detected;
     if ((metadata.pages ?? 1) > 1) {
       return { ok: false, failureCode: 'ANIMATED_UNSUPPORTED' };
     }
@@ -107,6 +110,10 @@ export class ImageCompressorService {
         case 'avif':
           pipeline = pipeline.avif({ quality: 50, effort: 4 });
           break;
+        default: {
+          const unencodable: never = format;
+          throw new Error(`No encoder for ${String(unencodable)}`);
+        }
       }
       encoded = await pipeline.toBuffer({ resolveWithObject: true });
     } catch {

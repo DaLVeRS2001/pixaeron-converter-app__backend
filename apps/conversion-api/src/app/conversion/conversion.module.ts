@@ -10,6 +10,8 @@ import {
   ENTITLEMENTS_GRPC_CLIENT,
   EntitlementsClient,
 } from '../entitlements/entitlements.client';
+import { WorkerEventProcessorService } from '../events/worker-event-processor.service';
+import { WorkerEventsConsumer } from '../events/worker-events.consumer';
 import { AnonymousIdentityService } from '../identity/anonymous-identity.service';
 import { OutboxPublisherService } from '../outbox/outbox-publisher.service';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -55,6 +57,8 @@ const entitlementsProtoPath = join(
     InputObjectStorageService,
     OutboxPublisherService,
     UploadCompletionService,
+    WorkerEventProcessorService,
+    WorkerEventsConsumer,
   ],
 })
 export class ConversionModule {}

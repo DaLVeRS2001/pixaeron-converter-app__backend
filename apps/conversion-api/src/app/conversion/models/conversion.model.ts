@@ -50,6 +50,24 @@ export class ConversionFile {
   @Field(() => ConversionResultKind, { nullable: true })
   resultKind!: ConversionResultKind | null;
 
+  @Field(() => Int, { nullable: true })
+  outputBytes!: number | null;
+
+  @Field(() => String, { nullable: true })
+  outputFormat!: string | null;
+
+  @Field(() => Int, { nullable: true })
+  width!: number | null;
+
+  @Field(() => Int, { nullable: true })
+  height!: number | null;
+
+  @Field(() => String, { nullable: true })
+  failureCode!: string | null;
+
+  @Field(() => String, { nullable: true })
+  downloadUrl!: string | null;
+
   @Field(() => ConversionUploadTarget, { nullable: true })
   upload!: ConversionUploadTarget | null;
 }

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   PAID_LARGE_QUEUE,
-  TIER_QUEUES,
+  queueForTier,
   type ConversionRequestMessage,
 } from '@pixaeron/conversion-contract';
 import {
@@ -297,10 +297,7 @@ export class AdmissionService {
         throw new AdmissionError('BATCH_NOT_ADMITTABLE');
       }
 
-      const tierQueue = TIER_QUEUES[snapshot.queueTier];
-      if (!tierQueue) {
-        throw new Error(`Unmapped queue tier ${snapshot.queueTier}`);
-      }
+      const tierQueue = queueForTier(snapshot.queueTier);
 
       await transaction.outboxEvent.createMany({
         data: claimed.map((file) => ({

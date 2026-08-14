@@ -14,8 +14,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  outputObjectKey,
+  queueForTier,
   queueUrl,
-  TIER_QUEUES,
   type ConversionRequestMessage,
 } from '@pixaeron/conversion-contract';
 import { createHash } from 'node:crypto';
@@ -31,6 +32,7 @@ import { WORKER_SQS_CLIENT } from './worker-sqs.client';
 const PRIORITY_TIERS = [3, 2, 1, 0];
 const RECEIVE_WAIT_SECONDS = 20;
 const RETRY_DELAY_MS = 1_000;
+const MAX_RETRY_DELAY_MS = 30_000;
 const CLAIM_VISIBILITY_SECONDS = 120;
 const HEARTBEAT_INTERVAL_MS = 45_000;
 const STARVATION_GRANT_PERIOD = 8;
@@ -61,7 +63,7 @@ export class QueueConsumerService
     const accountId = configService.getOrThrow<string>('AWS_ACCOUNT_ID');
     const suffix = configService.get<string>('SQS_QUEUE_SUFFIX') ?? '';
     this.queueUrls = PRIORITY_TIERS.map((tier) =>
-      queueUrl(region, accountId, TIER_QUEUES[tier], suffix),
+      queueUrl(region, accountId, queueForTier(tier), suffix),
     );
   }
 
@@ -84,6 +86,8 @@ export class QueueConsumerService
   }
 
   private async pollLoop(priority: number, url: string): Promise<void> {
+    let consecutiveFailures = 0;
+
     while (this.running) {
       try {
         const response = await this.client.send(
@@ -96,6 +100,8 @@ export class QueueConsumerService
           }),
           { abortSignal: this.shutdown.signal },
         );
+
+        consecutiveFailures = 0;
 
         const message = response.Messages?.[0];
         if (!message?.ReceiptHandle) continue;
@@ -126,12 +132,21 @@ export class QueueConsumerService
           clearInterval(heartbeat);
         }
       } catch (error) {
-        if (!this.running || (error as Error).name === 'AbortError') break;
+        if (!this.running || this.shutdown.signal.aborted) break;
 
+        consecutiveFailures++;
         this.logger.error(
-          `Queue poll failed for ${url}: ${(error as Error).message}`,
+          `Queue poll failed for ${url} ${consecutiveFailures} times in a row: ${(error as Error).message}`,
         );
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        await new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            Math.min(
+              RETRY_DELAY_MS * 2 ** (consecutiveFailures - 1),
+              MAX_RETRY_DELAY_MS,
+            ),
+          ),
+        );
       }
     }
   }
@@ -160,28 +175,9 @@ export class QueueConsumerService
     }
   }
 
-  private async handle(url: string, message: Message): Promise<void> {
-    const receiptHandle = message.ReceiptHandle as string;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(message.Body ?? '');
-    } catch {
-      parsed = null;
-    }
-    const candidate = parsed as Partial<ConversionRequestMessage> | null;
-    const request =
-      candidate &&
-      typeof candidate === 'object' &&
-      [
-        candidate.fileId,
-        candidate.batchId,
-        candidate.inputObjectKey,
-        candidate.inputEtag,
-      ].every((field) => typeof field === 'string' && field.length > 0)
-        ? (candidate as ConversionRequestMessage)
-        : null;
-    if (!request) {
+  async handle(url: string, message: Message): Promise<void> {
+    const request = parseConversionRequest(message.Body ?? '');
+    if (!request || !message.ReceiptHandle) {
       this.logger.error(
         `Malformed conversion request on ${url}; leaving for redrive`,
       );
@@ -212,7 +208,7 @@ export class QueueConsumerService
           outcome: 'FAILED',
           failureCode: error.failureCode,
         });
-        await this.deleteMessage(url, receiptHandle);
+        await this.deleteMessage(url, message.ReceiptHandle);
         return;
       }
       throw error;
@@ -226,15 +222,17 @@ export class QueueConsumerService
         outcome: 'FAILED',
         failureCode: result.failureCode,
       });
-      await this.deleteMessage(url, receiptHandle);
+      await this.deleteMessage(url, message.ReceiptHandle);
       return;
     }
 
-    const outputObjectKey = `outputs/${request.batchId}/${request.fileId}`;
+    const objectKey = outputObjectKey(request.batchId, request.fileId, attempt);
+    const checksum = createHash('sha256').update(result.bytes).digest('base64');
     await this.storage.putOutput(
-      outputObjectKey,
+      objectKey,
       result.bytes,
       result.contentType,
+      checksum,
     );
     await this.events.publish({
       type: 'RESULT',
@@ -243,14 +241,14 @@ export class QueueConsumerService
       resultKind: result.kind,
       inputFormat: result.format,
       frameCount: result.frames,
-      outputObjectKey,
+      outputObjectKey: objectKey,
       outputBytes: result.bytes.length,
-      outputChecksum: createHash('sha256').update(result.bytes).digest('hex'),
+      outputChecksumSha256: checksum,
       outputFormat: result.format,
       width: result.width,
       height: result.height,
     });
-    await this.deleteMessage(url, receiptHandle);
+    await this.deleteMessage(url, message.ReceiptHandle);
   }
 
   private async deleteMessage(
@@ -265,3 +263,32 @@ export class QueueConsumerService
     );
   }
 }
+
+export const parseConversionRequest = (
+  body: string,
+): ConversionRequestMessage | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+
+  const { fileId, batchId, inputObjectKey, inputEtag } = parsed as Record<
+    string,
+    unknown
+  >;
+  const isNonEmptyString = (value: unknown): value is string =>
+    typeof value === 'string' && value.length > 0;
+  if (
+    !isNonEmptyString(fileId) ||
+    !isNonEmptyString(batchId) ||
+    !isNonEmptyString(inputObjectKey) ||
+    !isNonEmptyString(inputEtag)
+  ) {
+    return null;
+  }
+
+  return { fileId, batchId, inputObjectKey, inputEtag };
+};

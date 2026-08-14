@@ -5,12 +5,16 @@ import {
 } from '@aws-sdk/client-s3';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { ConversionFailureCode } from '@pixaeron/conversion-contract';
 
 const TRANSFER_DEADLINE_MS = 60_000;
 
 export class InputIntegrityError extends Error {
   constructor(
-    readonly failureCode: 'INPUT_CHANGED' | 'INPUT_MISSING' | 'INPUT_TOO_LARGE',
+    readonly failureCode: Extract<
+      ConversionFailureCode,
+      'INPUT_CHANGED' | 'INPUT_MISSING' | 'INPUT_TOO_LARGE'
+    >,
   ) {
     super(failureCode);
     this.name = 'InputIntegrityError';
@@ -83,6 +87,7 @@ export class WorkerObjectStorageService {
     objectKey: string,
     bytes: Buffer,
     contentType: string,
+    checksumSha256: string,
   ): Promise<void> {
     try {
       await this.client.send(
@@ -91,6 +96,7 @@ export class WorkerObjectStorageService {
           Key: objectKey,
           Body: bytes,
           ContentType: contentType,
+          ChecksumSHA256: checksumSha256,
         }),
         { abortSignal: AbortSignal.timeout(TRANSFER_DEADLINE_MS) },
       );

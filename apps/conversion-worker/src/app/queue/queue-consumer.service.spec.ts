@@ -5,8 +5,6 @@ import { QueueConsumerService } from './queue-consumer.service';
 import { InputIntegrityError } from '../storage/worker-object-storage.service';
 import type { Message } from '@aws-sdk/client-sqs';
 
-type Handle = (queueUrl: string, message: Message) => Promise<void>;
-
 const QUEUE_URL =
   'https://sqs.eu-central-1.amazonaws.com/123456789012/pixaeron-conversion-anon-dev';
 
@@ -62,14 +60,11 @@ describe('QueueConsumerService', () => {
     ...overrides,
   });
 
-  const handle = () =>
-    (service as unknown as { handle: Handle }).handle.bind(service);
-
   const sentCommands = () =>
     client.send.mock.calls.map(([command]) => command.constructor.name);
 
   it('processes a request through started, upload, result, and delete', async () => {
-    await handle()(QUEUE_URL, message());
+    await service.handle(QUEUE_URL, message());
 
     expect(events.publish).toHaveBeenNthCalledWith(1, {
       type: 'STARTED',
@@ -82,9 +77,10 @@ describe('QueueConsumerService', () => {
       'etag-1',
     );
     expect(storage.putOutput).toHaveBeenCalledWith(
-      'outputs/batch-1/file-1',
+      'outputs/batch-1/file-1/2',
       Buffer.from('output-bytes'),
       'image/jpeg',
+      createHash('sha256').update(Buffer.from('output-bytes')).digest('base64'),
     );
     expect(events.publish).toHaveBeenNthCalledWith(2, {
       type: 'RESULT',
@@ -95,11 +91,11 @@ describe('QueueConsumerService', () => {
       resultKind: 'SAVED',
       inputFormat: 'jpeg',
       frameCount: 1,
-      outputObjectKey: 'outputs/batch-1/file-1',
+      outputObjectKey: 'outputs/batch-1/file-1/2',
       outputBytes: 12,
-      outputChecksum: createHash('sha256')
+      outputChecksumSha256: createHash('sha256')
         .update(Buffer.from('output-bytes'))
-        .digest('hex'),
+        .digest('base64'),
       outputFormat: 'jpeg',
       width: 10,
       height: 20,
@@ -113,7 +109,7 @@ describe('QueueConsumerService', () => {
       failureCode: 'UNSUPPORTED_FORMAT',
     });
 
-    await handle()(QUEUE_URL, message());
+    await service.handle(QUEUE_URL, message());
 
     expect(storage.putOutput).not.toHaveBeenCalled();
     expect(events.publish).toHaveBeenLastCalledWith(
@@ -131,7 +127,7 @@ describe('QueueConsumerService', () => {
       new InputIntegrityError('INPUT_CHANGED'),
     );
 
-    await handle()(QUEUE_URL, message());
+    await service.handle(QUEUE_URL, message());
 
     expect(compressor.compress).not.toHaveBeenCalled();
     expect(events.publish).toHaveBeenLastCalledWith(
@@ -146,7 +142,7 @@ describe('QueueConsumerService', () => {
   it('leaves the message for redelivery on a transient storage failure', async () => {
     storage.getInput.mockRejectedValue(new Error('socket hang up'));
 
-    await expect(handle()(QUEUE_URL, message())).rejects.toThrow(
+    await expect(service.handle(QUEUE_URL, message())).rejects.toThrow(
       'socket hang up',
     );
 
@@ -164,7 +160,7 @@ describe('QueueConsumerService', () => {
   ])(
     'leaves a message with %s for redrive without publishing events',
     async (_case, body) => {
-      await handle()(QUEUE_URL, message({ Body: body }));
+      await service.handle(QUEUE_URL, message({ Body: body }));
 
       expect(events.publish).not.toHaveBeenCalled();
       expect(sentCommands()).not.toContain('DeleteMessageCommand');
