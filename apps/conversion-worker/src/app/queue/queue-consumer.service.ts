@@ -14,9 +14,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  isMember,
   outputObjectKey,
   queueForTier,
   queueUrl,
+  RETENTION_CLASSES,
   type ConversionRequestMessage,
 } from '@pixaeron/conversion-contract';
 import { createHash } from 'node:crypto';
@@ -246,6 +248,7 @@ export class QueueConsumerService
       result.bytes,
       result.contentType,
       checksum,
+      request.outputRetention,
     );
     await this.events.publish({
       type: 'RESULT',
@@ -288,10 +291,8 @@ export const parseConversionRequest = (
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
 
-  const { fileId, batchId, inputObjectKey, inputEtag } = parsed as Record<
-    string,
-    unknown
-  >;
+  const { fileId, batchId, inputObjectKey, inputEtag, outputRetention } =
+    parsed as Record<string, unknown>;
   const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.length > 0;
   if (
@@ -303,5 +304,13 @@ export const parseConversionRequest = (
     return null;
   }
 
-  return { fileId, batchId, inputObjectKey, inputEtag };
+  return {
+    fileId,
+    batchId,
+    inputObjectKey,
+    inputEtag,
+    outputRetention: isMember(RETENTION_CLASSES, outputRetention)
+      ? outputRetention
+      : 'standard',
+  };
 };

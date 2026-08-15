@@ -44,6 +44,7 @@ const response: GetEntitlementResponse = {
     maxConcurrentFiles: 1,
     queueTier: 0,
     minStartDelayMs: 0,
+    outputRetentionHours: 48,
   },
 };
 

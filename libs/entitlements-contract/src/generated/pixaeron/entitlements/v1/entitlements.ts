@@ -34,6 +34,7 @@ export interface EntitlementSnapshot {
   maxConcurrentFiles: number;
   queueTier: number;
   minStartDelayMs: number;
+  outputRetentionHours: number;
 }
 
 export interface EntitlementsServiceClient {

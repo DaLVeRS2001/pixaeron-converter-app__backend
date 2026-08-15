@@ -33,6 +33,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: plan.maxConcurrentFiles,
         queueTier: plan.queueTier,
         minStartDelayMs: plan.minStartDelayMs,
+        outputRetentionHours: plan.outputRetentionHours,
       })),
     ).toEqual([
       {
@@ -44,6 +45,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 1,
         queueTier: 0,
         minStartDelayMs: 0,
+        outputRetentionHours: 48,
       },
       {
         code: PlanCode.FREE,
@@ -54,6 +56,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 1,
         queueTier: 1,
         minStartDelayMs: 0,
+        outputRetentionHours: 48,
       },
       {
         code: PlanCode.LIGHT,
@@ -64,6 +67,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,
+        outputRetentionHours: 168,
       },
       {
         code: PlanCode.PRO,
@@ -74,6 +78,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 8,
         queueTier: 3,
         minStartDelayMs: 0,
+        outputRetentionHours: 168,
       },
     ]);
   });
@@ -89,6 +94,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,
+        outputRetentionHours: 48,
       },
     });
     await prisma.plan.create({
@@ -101,6 +107,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,
+        outputRetentionHours: 48,
       },
     });
 

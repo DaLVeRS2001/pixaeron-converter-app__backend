@@ -13,6 +13,7 @@ import {
 import { WorkerEventProcessorService } from '../events/worker-event-processor.service';
 import { WorkerEventsConsumer } from '../events/worker-events.consumer';
 import { AnonymousIdentityService } from '../identity/anonymous-identity.service';
+import { RetentionService } from '../lifecycle/retention.service';
 import { OutboxPublisherService } from '../outbox/outbox-publisher.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InputObjectStorageService } from '../storage/input-object-storage.service';
@@ -56,6 +57,7 @@ const entitlementsProtoPath = join(
     EntitlementsClient,
     InputObjectStorageService,
     OutboxPublisherService,
+    RetentionService,
     UploadCompletionService,
     WorkerEventProcessorService,
     WorkerEventsConsumer,

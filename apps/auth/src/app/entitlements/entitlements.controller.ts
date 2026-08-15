@@ -42,6 +42,7 @@ export class EntitlementsController implements EntitlementsServiceController {
         maxConcurrentFiles: plan.maxConcurrentFiles,
         queueTier: plan.queueTier,
         minStartDelayMs: plan.minStartDelayMs,
+        outputRetentionHours: plan.outputRetentionHours,
       },
     };
   }

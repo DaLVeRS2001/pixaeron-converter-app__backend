@@ -59,6 +59,7 @@ describe('QueueConsumerService', () => {
       batchId: 'batch-1',
       inputObjectKey: 'inputs/batch-1/file-1',
       inputEtag: 'etag-1',
+      outputRetention: 'standard',
     }),
     Attributes: { ApproximateReceiveCount: '2' },
     ...overrides,
@@ -85,6 +86,7 @@ describe('QueueConsumerService', () => {
       Buffer.from('output-bytes'),
       'image/jpeg',
       createHash('sha256').update(Buffer.from('output-bytes')).digest('base64'),
+      'standard',
     );
     expect(events.publish).toHaveBeenNthCalledWith(2, {
       type: 'RESULT',
@@ -170,6 +172,22 @@ describe('QueueConsumerService', () => {
       expect(sentCommands()).not.toContain('DeleteMessageCommand');
     },
   );
+
+  it('processes a request enqueued before retention classes existed', async () => {
+    const body = JSON.parse(message().Body as string);
+    delete body.outputRetention;
+
+    await service.handle(QUEUE_URL, message({ Body: JSON.stringify(body) }));
+
+    expect(storage.putOutput).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Buffer),
+      expect.any(String),
+      expect.any(String),
+      'standard',
+    );
+    expect(sentCommands()).toContain('DeleteMessageCommand');
+  });
 
   it('grants the processing slot to the highest waiting priority first', async () => {
     const internals = service as unknown as {

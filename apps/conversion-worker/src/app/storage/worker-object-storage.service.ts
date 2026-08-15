@@ -5,7 +5,11 @@ import {
 } from '@aws-sdk/client-s3';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { ConversionFailureCode } from '@pixaeron/conversion-contract';
+import {
+  OUTPUT_RETENTION_TAG,
+  type ConversionFailureCode,
+  type ConversionRetentionClass,
+} from '@pixaeron/conversion-contract';
 
 const TRANSFER_DEADLINE_MS = 60_000;
 
@@ -88,6 +92,7 @@ export class WorkerObjectStorageService {
     bytes: Buffer,
     contentType: string,
     checksumSha256: string,
+    retention: ConversionRetentionClass,
   ): Promise<void> {
     try {
       await this.client.send(
@@ -97,6 +102,7 @@ export class WorkerObjectStorageService {
           Body: bytes,
           ContentType: contentType,
           ChecksumSHA256: checksumSha256,
+          Tagging: `${OUTPUT_RETENTION_TAG}=${retention}`,
         }),
         { abortSignal: AbortSignal.timeout(TRANSFER_DEADLINE_MS) },
       );

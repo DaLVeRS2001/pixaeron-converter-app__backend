@@ -25,11 +25,18 @@ export const isMember = <T extends string>(
   value: unknown,
 ): value is T => values.includes(value as T);
 
+export const RETENTION_CLASSES = ['standard', 'extended'] as const;
+
+export type ConversionRetentionClass = (typeof RETENTION_CLASSES)[number];
+
+export const OUTPUT_RETENTION_TAG = 'retention';
+
 export type ConversionRequestMessage = {
   fileId: string;
   batchId: string;
   inputObjectKey: string;
   inputEtag: string;
+  outputRetention: ConversionRetentionClass;
 };
 
 export type WorkerStartedEvent = {

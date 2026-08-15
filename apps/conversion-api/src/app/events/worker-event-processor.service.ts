@@ -10,22 +10,13 @@ import {
   ConversionFileStatus,
   type Prisma,
 } from '../../generated/prisma/client';
+import { rollUpBatch } from '../lifecycle/batch-rollup';
 import { PrismaService } from '../prisma/prisma.service';
 import { InputObjectStorageService } from '../storage/input-object-storage.service';
 
 const EVENT_ACCEPTING_FILE_STATUSES = [
   ConversionFileStatus.QUEUED,
   ConversionFileStatus.PROCESSING,
-];
-const TERMINAL_FILE_STATUSES = new Set<ConversionFileStatus>([
-  ConversionFileStatus.COMPLETED,
-  ConversionFileStatus.FAILED,
-  ConversionFileStatus.CANCELLED,
-  ConversionFileStatus.EXPIRED,
-]);
-const ROLLABLE_BATCH_STATUSES = [
-  ConversionBatchStatus.QUEUED,
-  ConversionBatchStatus.PROCESSING,
 ];
 
 @Injectable()
@@ -84,9 +75,19 @@ export class WorkerEventProcessorService {
         },
         data,
       });
-      if (claimed.count === 0) return;
+      if (claimed.count === 0) {
+        this.logger.warn(
+          `Dropped ${event.outcome} for file ${event.fileId}: attempt ${event.attempt} no longer accepts results`,
+        );
+        return;
+      }
 
-      await this.rollUpBatch(transaction, event.batchId);
+      const status = await rollUpBatch(transaction, event.batchId);
+      if (status !== null) {
+        this.logger.log(
+          `Conversion batch ${event.batchId} finished as ${status}`,
+        );
+      }
     });
   }
 
@@ -135,32 +136,5 @@ export class WorkerEventProcessorService {
       height: event.height,
       completedAt: new Date(),
     };
-  }
-
-  private async rollUpBatch(
-    transaction: Prisma.TransactionClient,
-    batchId: string,
-  ): Promise<void> {
-    const files = await transaction.conversionFile.findMany({
-      where: { batchId },
-      select: { status: true },
-    });
-    if (files.some(({ status }) => !TERMINAL_FILE_STATUSES.has(status))) return;
-
-    const completed = files.filter(
-      ({ status }) => status === ConversionFileStatus.COMPLETED,
-    ).length;
-    const status =
-      completed === files.length
-        ? ConversionBatchStatus.COMPLETED
-        : completed === 0
-          ? ConversionBatchStatus.FAILED
-          : ConversionBatchStatus.PARTIAL;
-
-    await transaction.conversionBatch.updateMany({
-      where: { id: batchId, status: { in: ROLLABLE_BATCH_STATUSES } },
-      data: { status },
-    });
-    this.logger.log(`Conversion batch ${batchId} finished as ${status}`);
   }
 }
