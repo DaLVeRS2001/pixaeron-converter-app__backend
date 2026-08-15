@@ -38,7 +38,7 @@ export class UploadCompletionService {
 
     const verifications = await Promise.all(
       uploading.map(async (file) => {
-        const stored = await this.storage.headInput(file.inputObjectKey);
+        const stored = await this.storage.head(file.inputObjectKey);
         if (!stored) return 0;
 
         const verified = await this.prisma.conversionFile.updateMany({

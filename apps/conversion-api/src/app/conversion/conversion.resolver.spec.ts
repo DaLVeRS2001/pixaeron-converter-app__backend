@@ -15,6 +15,7 @@ const proSnapshot: EntitlementSnapshot = {
   maxConcurrentFiles: 8,
   queueTier: 3,
   minStartDelayMs: 0,
+  outputRetentionHours: 48,
 };
 
 describe('ConversionResolver entitlement sizing', () => {

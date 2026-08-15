@@ -66,6 +66,7 @@ model ConversionBatch {
   @@unique([subject, idempotencyKey])
   @@index([subject, createdAt(sort: Desc)])
   @@index([status, createdAt])
+  @@index([expiresAt])
   @@map("conversion_batches")
 }
 

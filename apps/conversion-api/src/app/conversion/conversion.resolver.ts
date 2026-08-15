@@ -219,12 +219,26 @@ export class ConversionResolver {
               )
             : null;
 
+          const outputObjectKey =
+            file.status === ConversionFileStatus.COMPLETED
+              ? file.outputObjectKey
+              : null;
+
           return {
             id: file.id,
             status: file.status,
             inputBytes:
               file.inputBytes === null ? null : Number(file.inputBytes),
             resultKind: file.resultKind,
+            outputBytes:
+              file.outputBytes === null ? null : Number(file.outputBytes),
+            outputFormat: file.outputFormat,
+            width: file.width,
+            height: file.height,
+            failureCode: file.failureCode,
+            downloadUrl:
+              outputObjectKey &&
+              (await this.storage.presignDownload(outputObjectKey)),
             upload: target && {
               url: target.url,
               fields: Object.entries(target.fields).map(([name, value]) => ({

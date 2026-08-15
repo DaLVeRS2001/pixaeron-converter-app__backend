@@ -27,7 +27,11 @@ export const conversionEnvironmentSchema = Joi.object({
   AWS_ACCOUNT_ID: awsAccountId,
   AWS_ACCESS_KEY_ID: awsAccessKeyId,
   AWS_SECRET_ACCESS_KEY: awsSecretAccessKey,
-  SQS_QUEUE_SUFFIX: sqsQueueSuffix,
+  SQS_QUEUE_SUFFIX: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: sqsQueueSuffix,
+    otherwise: sqsQueueSuffix.required(),
+  }),
   CONVERSION_S3_BUCKET: s3BucketName,
   ENTITLEMENTS_GRPC_URL: grpcAddress.required(),
   ENTITLEMENTS_GRPC_DEADLINE_MS: Joi.number()

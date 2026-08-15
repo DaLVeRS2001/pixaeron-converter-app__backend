@@ -1,8 +1,42 @@
+export const RESULT_KINDS = [
+  'SAVED',
+  'NO_SAVINGS',
+  'SANITIZED_LARGER',
+] as const;
+
+export const IMAGE_FORMATS = ['jpeg', 'png', 'webp', 'avif'] as const;
+
+export const FAILURE_CODES = [
+  'ANIMATED_UNSUPPORTED',
+  'DECODE_FAILED',
+  'INPUT_CHANGED',
+  'INPUT_MISSING',
+  'INPUT_TOO_LARGE',
+  'PIXELS_EXCEEDED',
+  'UNSUPPORTED_FORMAT',
+] as const;
+
+export type ConversionResultKindName = (typeof RESULT_KINDS)[number];
+export type ConversionImageFormat = (typeof IMAGE_FORMATS)[number];
+export type ConversionFailureCode = (typeof FAILURE_CODES)[number];
+
+export const isMember = <T extends string>(
+  values: readonly T[],
+  value: unknown,
+): value is T => values.includes(value as T);
+
+export const RETENTION_CLASSES = ['standard', 'extended'] as const;
+
+export type ConversionRetentionClass = (typeof RETENTION_CLASSES)[number];
+
+export const OUTPUT_RETENTION_TAG = 'retention';
+
 export type ConversionRequestMessage = {
   fileId: string;
   batchId: string;
   inputObjectKey: string;
   inputEtag: string;
+  outputRetention: ConversionRetentionClass;
 };
 
 export type WorkerStartedEvent = {
@@ -20,12 +54,12 @@ export type WorkerResultEvent = {
 } & (
   | {
       outcome: 'COMPLETED';
-      resultKind: 'SAVED' | 'NO_SAVINGS' | 'SANITIZED_LARGER';
+      resultKind: ConversionResultKindName;
       inputFormat: string;
       frameCount: number;
       outputObjectKey: string;
       outputBytes: number;
-      outputChecksum: string;
+      outputChecksumSha256: string;
       outputFormat: string;
       width: number;
       height: number;

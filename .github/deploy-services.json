@@ -1,6 +1,7 @@
 [
   {
     "project": "notifications",
+    "host": "application",
     "deploymentOrder": 5,
     "imageName": "ghcr.io/dalvers2001/pixaeron-notifications",
     "dockerfile": "apps/notifications/Dockerfile",
@@ -19,6 +20,7 @@
   },
   {
     "project": "auth",
+    "host": "application",
     "deploymentOrder": 10,
     "imageName": "ghcr.io/dalvers2001/pixaeron-auth",
     "dockerfile": "apps/auth/Dockerfile",
@@ -37,6 +39,7 @@
   },
   {
     "project": "gateway",
+    "host": "application",
     "deploymentOrder": 100,
     "imageName": "ghcr.io/dalvers2001/pixaeron-gateway",
     "dockerfile": "apps/gateway/Dockerfile",
@@ -45,6 +48,19 @@
     "ssmPath": "/pixaeron/production/gateway",
     "secureParameters": ["APOLLO_KEY"],
     "runtimeEnvFileEnv": "GATEWAY_RUNTIME_ENV_FILE",
+    "migrationCommand": ""
+  },
+  {
+    "project": "conversion-worker",
+    "host": "worker",
+    "deploymentOrder": 200,
+    "imageName": "ghcr.io/dalvers2001/pixaeron-conversion-worker",
+    "dockerfile": "apps/conversion-worker/Dockerfile",
+    "composeService": "conversion-worker",
+    "imageTagEnv": "CONVERSION_WORKER_IMAGE_TAG",
+    "ssmPath": "/pixaeron/production/conversion-worker",
+    "secureParameters": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+    "runtimeEnvFileEnv": "CONVERSION_WORKER_RUNTIME_ENV_FILE",
     "migrationCommand": ""
   }
 ]

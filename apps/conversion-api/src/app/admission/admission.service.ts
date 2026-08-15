@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   PAID_LARGE_QUEUE,
-  TIER_QUEUES,
+  queueForTier,
   type ConversionRequestMessage,
+  type ConversionRetentionClass,
 } from '@pixaeron/conversion-contract';
 import {
   EntitlementPlanCode,
@@ -28,7 +29,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { isUniqueConstraintError } from '../prisma/prisma.support';
 
 const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
-const OUTPUT_RETENTION_MS = 48 * 60 * 60 * 1000;
+
+const RETENTION_CLASS_BY_HOURS: Record<number, ConversionRetentionClass> = {
+  48: 'standard',
+  168: 'extended',
+};
 
 const PLAN_CODES: Partial<Record<EntitlementPlanCode, ConversionPlanCode>> = {
   [EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS]:
@@ -209,6 +214,14 @@ export class AdmissionService {
     ownership: BatchOwnership,
     snapshot: EntitlementSnapshot,
   ): Promise<AdmissionResult> {
+    const outputRetention =
+      RETENTION_CLASS_BY_HOURS[snapshot.outputRetentionHours];
+    if (!outputRetention) {
+      throw new Error(
+        `Unmapped output retention ${snapshot.outputRetentionHours}h for plan ${snapshot.planCode}`,
+      );
+    }
+
     const batch = await this.prisma.conversionBatch.findUnique({
       where: { id: batchId },
     });
@@ -226,6 +239,10 @@ export class AdmissionService {
     }
 
     return this.prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT 1 FROM "conversion_batches" WHERE "id" = ${batch.id} FOR UPDATE
+      `;
+
       const claimed = await transaction.$queryRaw<ClaimedFile[]>`
         SELECT "id", "input_object_key", "input_etag", "input_bytes"
         FROM "conversion_files"
@@ -272,7 +289,9 @@ export class AdmissionService {
         }
       }
 
-      const retentionExpiresAt = new Date(Date.now() + OUTPUT_RETENTION_MS);
+      const retentionExpiresAt = new Date(
+        Date.now() + snapshot.outputRetentionHours * 60 * 60 * 1000,
+      );
       await transaction.conversionFile.updateMany({
         where: { id: { in: claimed.map(({ id }) => id) } },
         data: {
@@ -297,10 +316,7 @@ export class AdmissionService {
         throw new AdmissionError('BATCH_NOT_ADMITTABLE');
       }
 
-      const tierQueue = TIER_QUEUES[snapshot.queueTier];
-      if (!tierQueue) {
-        throw new Error(`Unmapped queue tier ${snapshot.queueTier}`);
-      }
+      const tierQueue = queueForTier(snapshot.queueTier);
 
       await transaction.outboxEvent.createMany({
         data: claimed.map((file) => ({
@@ -314,6 +330,7 @@ export class AdmissionService {
             batchId: batch.id,
             inputObjectKey: file.input_object_key,
             inputEtag: file.input_etag as string,
+            outputRetention,
           } satisfies ConversionRequestMessage,
         })),
       });

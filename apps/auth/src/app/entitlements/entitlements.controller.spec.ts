@@ -18,6 +18,7 @@ const lightPlan = {
   maxConcurrentFiles: 3,
   queueTier: 2,
   minStartDelayMs: 0,
+  outputRetentionHours: 48,
   createdAt: new Date('2026-08-13T00:00:00Z'),
 };
 
@@ -46,6 +47,7 @@ describe('EntitlementsController', () => {
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,
+        outputRetentionHours: 48,
       },
     });
     expect(planService.getPlanForSubject).toHaveBeenCalledWith(SUBJECT);

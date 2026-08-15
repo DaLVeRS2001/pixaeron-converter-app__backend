@@ -93,6 +93,7 @@ model Plan {
   maxConcurrentFiles Int      @map("max_concurrent_files")
   queueTier          Int      @map("queue_tier")
   minStartDelayMs    Int      @map("min_start_delay_ms")
+  outputRetentionHours Int    @map("output_retention_hours")
   createdAt          DateTime @default(now()) @map("created_at")
 
   @@id([code, revision])

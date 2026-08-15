@@ -24,6 +24,7 @@ const anonymousSnapshot: EntitlementSnapshot = {
   maxConcurrentFiles: 1,
   queueTier: 0,
   minStartDelayMs: 0,
+  outputRetentionHours: 48,
 };
 
 const proSnapshot: EntitlementSnapshot = {
@@ -358,5 +359,48 @@ describe('AdmissionService on Postgres', () => {
       'pixaeron-conversion-paid-large',
       'pixaeron-conversion-pro',
     ]);
+  });
+
+  it('stamps the paid retention window and marks the request extended', async () => {
+    const snapshot = { ...proSnapshot, outputRetentionHours: 168 };
+    const subject = randomUUID();
+    subjects.push(subject);
+    const { batch } = await readyBatch(subject, snapshot, 1);
+
+    const result = await service.admitReadyFiles(
+      batch.id,
+      { subject },
+      snapshot,
+    );
+
+    const window = result.batch.expiresAt.getTime() - Date.now();
+    expect(window).toBeGreaterThan(167 * 60 * 60 * 1000);
+    expect(window).toBeLessThanOrEqual(168 * 60 * 60 * 1000);
+
+    const [file] = await prisma.conversionFile.findMany({
+      where: { batchId: batch.id },
+    });
+    expect(file.expiresAt).toEqual(result.batch.expiresAt);
+
+    const [event] = await outboxEventsForBatches();
+    expect((event.payload as { outputRetention: string }).outputRetention).toBe(
+      'extended',
+    );
+  });
+
+  it('refuses admission when the plan carries an unmapped retention window', async () => {
+    const snapshot = { ...anonymousSnapshot, outputRetentionHours: 0 };
+    const subject = anonSubject();
+    const { batch } = await readyBatch(subject, anonymousSnapshot, 1);
+
+    await expect(
+      service.admitReadyFiles(batch.id, { subject }, snapshot),
+    ).rejects.toThrow(/Unmapped output retention 0h/);
+
+    await expect(outboxEventsForBatches()).resolves.toHaveLength(0);
+    const [file] = await prisma.conversionFile.findMany({
+      where: { batchId: batch.id },
+    });
+    expect(file.status).toBe(ConversionFileStatus.READY);
   });
 });

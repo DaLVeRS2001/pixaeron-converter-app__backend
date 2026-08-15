@@ -16,7 +16,11 @@ export const workerEnvironmentSchema = Joi.object({
   AWS_ACCESS_KEY_ID: awsAccessKeyId,
   AWS_SECRET_ACCESS_KEY: awsSecretAccessKey,
   CONVERSION_S3_BUCKET: s3BucketName,
-  SQS_QUEUE_SUFFIX: sqsQueueSuffix,
+  SQS_QUEUE_SUFFIX: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: sqsQueueSuffix,
+    otherwise: sqsQueueSuffix.required(),
+  }),
   CONVERSION_LARGE_FILE_BYTES: Joi.number()
     .integer()
     .min(1_048_576)
@@ -28,4 +32,8 @@ export const workerEnvironmentSchema = Joi.object({
     .max(500_000_000)
     .required()
     .raw(),
+  WORKER_PROGRESS_FILE: Joi.string()
+    .trim()
+    .min(1)
+    .default('/tmp/pixaeron-worker-progress'),
 });

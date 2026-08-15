@@ -13,6 +13,7 @@ const validEnvironment: Record<string, string> = {
   AWS_ACCESS_KEY_ID: 'AKIAEXAMPLEEXAMPLE',
   AWS_SECRET_ACCESS_KEY: 'example-secret-access-key-that-is-40-characters',
   CONVERSION_S3_BUCKET: 'pixaeron-conversion-dev',
+  SQS_QUEUE_SUFFIX: '-dev',
   ENTITLEMENTS_GRPC_URL: '127.0.0.1:50053',
   ENTITLEMENTS_GRPC_DEADLINE_MS: '2000',
   CONVERSION_LARGE_FILE_BYTES: '26214400',
@@ -85,5 +86,14 @@ describe('conversionEnvironmentSchema', () => {
   it('accepts a -dev queue suffix and rejects a bare one', () => {
     expect(validate({ SQS_QUEUE_SUFFIX: '-dev' }).error).toBeUndefined();
     expect(validate({ SQS_QUEUE_SUFFIX: 'dev' }).error).toBeDefined();
+  });
+
+  it('demands a queue suffix outside production so dev never shares the live queues', () => {
+    expect(
+      validate({ NODE_ENV: 'development', SQS_QUEUE_SUFFIX: undefined }).error,
+    ).toBeDefined();
+    expect(
+      validate({ NODE_ENV: 'production', SQS_QUEUE_SUFFIX: undefined }).error,
+    ).toBeUndefined();
   });
 });

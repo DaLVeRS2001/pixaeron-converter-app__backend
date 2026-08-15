@@ -1,14 +1,15 @@
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { QueueConsumerService } from './queue-consumer.service';
 import { InputIntegrityError } from '../storage/worker-object-storage.service';
 import type { Message } from '@aws-sdk/client-sqs';
 
-type Handle = (queueUrl: string, message: Message) => Promise<void>;
-
 const QUEUE_URL =
   'https://sqs.eu-central-1.amazonaws.com/123456789012/pixaeron-conversion-anon-dev';
+const progressFile = join(tmpdir(), `pixaeron-worker-spec-${randomUUID()}`);
 
 describe('QueueConsumerService', () => {
   let client: { send: jest.Mock; destroy: jest.Mock };
@@ -45,6 +46,7 @@ describe('QueueConsumerService', () => {
         AWS_REGION: 'eu-central-1',
         AWS_ACCOUNT_ID: '123456789012',
         SQS_QUEUE_SUFFIX: '-dev',
+        WORKER_PROGRESS_FILE: progressFile,
       }),
     );
   });
@@ -57,19 +59,17 @@ describe('QueueConsumerService', () => {
       batchId: 'batch-1',
       inputObjectKey: 'inputs/batch-1/file-1',
       inputEtag: 'etag-1',
+      outputRetention: 'standard',
     }),
     Attributes: { ApproximateReceiveCount: '2' },
     ...overrides,
   });
 
-  const handle = () =>
-    (service as unknown as { handle: Handle }).handle.bind(service);
-
   const sentCommands = () =>
     client.send.mock.calls.map(([command]) => command.constructor.name);
 
   it('processes a request through started, upload, result, and delete', async () => {
-    await handle()(QUEUE_URL, message());
+    await service.handle(QUEUE_URL, message());
 
     expect(events.publish).toHaveBeenNthCalledWith(1, {
       type: 'STARTED',
@@ -82,9 +82,11 @@ describe('QueueConsumerService', () => {
       'etag-1',
     );
     expect(storage.putOutput).toHaveBeenCalledWith(
-      'outputs/batch-1/file-1',
+      'outputs/batch-1/file-1/2',
       Buffer.from('output-bytes'),
       'image/jpeg',
+      createHash('sha256').update(Buffer.from('output-bytes')).digest('base64'),
+      'standard',
     );
     expect(events.publish).toHaveBeenNthCalledWith(2, {
       type: 'RESULT',
@@ -95,11 +97,11 @@ describe('QueueConsumerService', () => {
       resultKind: 'SAVED',
       inputFormat: 'jpeg',
       frameCount: 1,
-      outputObjectKey: 'outputs/batch-1/file-1',
+      outputObjectKey: 'outputs/batch-1/file-1/2',
       outputBytes: 12,
-      outputChecksum: createHash('sha256')
+      outputChecksumSha256: createHash('sha256')
         .update(Buffer.from('output-bytes'))
-        .digest('hex'),
+        .digest('base64'),
       outputFormat: 'jpeg',
       width: 10,
       height: 20,
@@ -113,7 +115,7 @@ describe('QueueConsumerService', () => {
       failureCode: 'UNSUPPORTED_FORMAT',
     });
 
-    await handle()(QUEUE_URL, message());
+    await service.handle(QUEUE_URL, message());
 
     expect(storage.putOutput).not.toHaveBeenCalled();
     expect(events.publish).toHaveBeenLastCalledWith(
@@ -131,7 +133,7 @@ describe('QueueConsumerService', () => {
       new InputIntegrityError('INPUT_CHANGED'),
     );
 
-    await handle()(QUEUE_URL, message());
+    await service.handle(QUEUE_URL, message());
 
     expect(compressor.compress).not.toHaveBeenCalled();
     expect(events.publish).toHaveBeenLastCalledWith(
@@ -146,7 +148,7 @@ describe('QueueConsumerService', () => {
   it('leaves the message for redelivery on a transient storage failure', async () => {
     storage.getInput.mockRejectedValue(new Error('socket hang up'));
 
-    await expect(handle()(QUEUE_URL, message())).rejects.toThrow(
+    await expect(service.handle(QUEUE_URL, message())).rejects.toThrow(
       'socket hang up',
     );
 
@@ -164,12 +166,28 @@ describe('QueueConsumerService', () => {
   ])(
     'leaves a message with %s for redrive without publishing events',
     async (_case, body) => {
-      await handle()(QUEUE_URL, message({ Body: body }));
+      await service.handle(QUEUE_URL, message({ Body: body }));
 
       expect(events.publish).not.toHaveBeenCalled();
       expect(sentCommands()).not.toContain('DeleteMessageCommand');
     },
   );
+
+  it('processes a request enqueued before retention classes existed', async () => {
+    const body = JSON.parse(message().Body as string);
+    delete body.outputRetention;
+
+    await service.handle(QUEUE_URL, message({ Body: JSON.stringify(body) }));
+
+    expect(storage.putOutput).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Buffer),
+      expect.any(String),
+      expect.any(String),
+      'standard',
+    );
+    expect(sentCommands()).toContain('DeleteMessageCommand');
+  });
 
   it('grants the processing slot to the highest waiting priority first', async () => {
     const internals = service as unknown as {

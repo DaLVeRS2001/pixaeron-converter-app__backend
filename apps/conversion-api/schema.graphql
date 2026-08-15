@@ -67,6 +67,12 @@ type ConversionFile {
   status: ConversionFileStatus!
   inputBytes: Int
   resultKind: ConversionResultKind
+  outputBytes: Int
+  outputFormat: String
+  width: Int
+  height: Int
+  failureCode: String
+  downloadUrl: String
   upload: ConversionUploadTarget
 }
 
