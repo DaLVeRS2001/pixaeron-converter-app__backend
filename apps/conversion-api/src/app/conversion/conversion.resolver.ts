@@ -1,4 +1,8 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   EntitlementPlanCode,
@@ -173,9 +177,17 @@ export class ConversionResolver {
   }
 
   private async anonymousSnapshotCappedToServedSizes(): Promise<EntitlementSnapshot> {
-    const response = await this.entitlements.getEntitlement({
-      planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
-    });
+    let response;
+    try {
+      response = await this.entitlements.getEntitlement({
+        planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'ENTITLEMENTS_UNAVAILABLE',
+        message: 'Plan limits are temporarily unavailable',
+      });
+    }
     if (!response.snapshot) {
       throw new Error('Entitlement response carried no snapshot');
     }

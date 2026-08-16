@@ -65,6 +65,20 @@ describe('ConversionResolver entitlement sizing', () => {
     expect((await cappedSnapshot(resolver)).maxFileBytes).toBe(5242880);
   });
 
+  it('reports an unreachable entitlements channel as retryable', async () => {
+    const { resolver } = buildResolver(proSnapshot);
+    (
+      resolver as unknown as { entitlements: { getEntitlement: jest.Mock } }
+    ).entitlements.getEntitlement.mockRejectedValue(
+      new Error('14 UNAVAILABLE: no connection established'),
+    );
+
+    await expect(cappedSnapshot(resolver)).rejects.toMatchObject({
+      status: 503,
+      response: { code: 'ENTITLEMENTS_UNAVAILABLE' },
+    });
+  });
+
   it('rejects an entitlement response without a snapshot', async () => {
     const { resolver } = buildResolver(proSnapshot);
     (
