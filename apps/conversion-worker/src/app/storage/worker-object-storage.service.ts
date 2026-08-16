@@ -34,7 +34,7 @@ export class WorkerObjectStorageService {
   constructor(configService: ConfigService) {
     this.bucket = configService.getOrThrow<string>('CONVERSION_S3_BUCKET');
     this.maxInputBytes = Number(
-      configService.getOrThrow<string>('CONVERSION_LARGE_FILE_BYTES'),
+      configService.getOrThrow<string>('WORKER_MAX_INPUT_BYTES'),
     );
     this.client = new S3Client({
       region: configService.getOrThrow<string>('AWS_REGION'),

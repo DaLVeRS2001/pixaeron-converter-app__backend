@@ -196,7 +196,7 @@ export class ConversionResolver {
       ...response.snapshot,
       maxFileBytes: Math.min(
         response.snapshot.maxFileBytes,
-        this.admission.largeFileBytes,
+        this.admission.largeQueueBytes,
       ),
     };
   }

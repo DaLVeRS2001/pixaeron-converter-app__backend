@@ -12,7 +12,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AdmissionService } from './admission.service';
 
-const LARGE_FILE_BYTES = 26214400;
+const LARGE_QUEUE_BYTES = 26214400;
 
 const anonymousSnapshot: EntitlementSnapshot = {
   planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
@@ -46,7 +46,7 @@ describe('AdmissionService on Postgres', () => {
   beforeAll(() => {
     const configService = new ConfigService({
       DATABASE_URL: process.env['DATABASE_URL'],
-      CONVERSION_LARGE_FILE_BYTES: String(LARGE_FILE_BYTES),
+      CONVERSION_LARGE_QUEUE_BYTES: String(LARGE_QUEUE_BYTES),
     });
     prisma = new PrismaService(configService);
     service = new AdmissionService(prisma, configService);
@@ -329,7 +329,7 @@ describe('AdmissionService on Postgres', () => {
     const { batch } = await readyBatch(subject, proSnapshot, 2);
     await prisma.conversionFile.updateMany({
       where: { batchId: batch.id },
-      data: { inputBytes: LARGE_FILE_BYTES + 1 },
+      data: { inputBytes: LARGE_QUEUE_BYTES + 1 },
     });
     const [small] = await prisma.conversionFile.findMany({
       where: { batchId: batch.id },

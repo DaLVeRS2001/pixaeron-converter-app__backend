@@ -53,7 +53,7 @@ export class ImageCompressorService {
 
   constructor(configService: ConfigService) {
     this.maxInputBytes = Number(
-      configService.getOrThrow<string>('CONVERSION_LARGE_FILE_BYTES'),
+      configService.getOrThrow<string>('WORKER_MAX_INPUT_BYTES'),
     );
     this.maxPixels = Number(
       configService.getOrThrow<string>('WORKER_MAX_PIXELS'),
