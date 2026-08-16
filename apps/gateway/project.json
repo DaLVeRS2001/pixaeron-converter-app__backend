@@ -2,7 +2,7 @@
   "name": "gateway",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "implicitDependencies": ["auth"],
+  "implicitDependencies": ["auth", "conversion-api"],
   "tags": [],
   "targets": {
     "build": {
@@ -10,7 +10,7 @@
       "cache": false,
       "dependsOn": [
         {
-          "projects": ["auth"],
+          "projects": ["auth", "conversion-api"],
           "target": "schema-check"
         }
       ],

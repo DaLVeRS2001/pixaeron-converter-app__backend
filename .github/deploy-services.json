@@ -32,10 +32,43 @@
       "JWT_PRIVATE_KEY_BASE64",
       "IP_HASH_SECRET",
       "CAPTCHA_SECRET_KEY",
-      "NOTIFICATIONS_COMMAND_SECRET"
+      "NOTIFICATIONS_COMMAND_SECRET",
+      "ENTITLEMENTS_COMMAND_SECRET"
     ],
     "runtimeEnvFileEnv": "AUTH_RUNTIME_ENV_FILE",
     "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/auth/prisma.config.ts"
+  },
+  {
+    "project": "conversion-worker",
+    "host": "worker",
+    "deploymentOrder": 20,
+    "imageName": "ghcr.io/dalvers2001/pixaeron-conversion-worker",
+    "dockerfile": "apps/conversion-worker/Dockerfile",
+    "composeService": "conversion-worker",
+    "imageTagEnv": "CONVERSION_WORKER_IMAGE_TAG",
+    "ssmPath": "/pixaeron/production/conversion-worker",
+    "secureParameters": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+    "runtimeEnvFileEnv": "CONVERSION_WORKER_RUNTIME_ENV_FILE",
+    "migrationCommand": ""
+  },
+  {
+    "project": "conversion-api",
+    "host": "application",
+    "deploymentOrder": 50,
+    "imageName": "ghcr.io/dalvers2001/pixaeron-conversion-api",
+    "dockerfile": "apps/conversion-api/Dockerfile",
+    "composeService": "conversion-api",
+    "imageTagEnv": "CONVERSION_API_IMAGE_TAG",
+    "ssmPath": "/pixaeron/production/conversion-api",
+    "secureParameters": [
+      "DATABASE_URL",
+      "IP_HASH_SECRET",
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "ENTITLEMENTS_COMMAND_SECRET"
+    ],
+    "runtimeEnvFileEnv": "CONVERSION_API_RUNTIME_ENV_FILE",
+    "migrationCommand": "./node_modules/.bin/prisma migrate deploy --config apps/conversion-api/prisma.config.ts"
   },
   {
     "project": "gateway",
@@ -48,19 +81,6 @@
     "ssmPath": "/pixaeron/production/gateway",
     "secureParameters": ["APOLLO_KEY"],
     "runtimeEnvFileEnv": "GATEWAY_RUNTIME_ENV_FILE",
-    "migrationCommand": ""
-  },
-  {
-    "project": "conversion-worker",
-    "host": "worker",
-    "deploymentOrder": 200,
-    "imageName": "ghcr.io/dalvers2001/pixaeron-conversion-worker",
-    "dockerfile": "apps/conversion-worker/Dockerfile",
-    "composeService": "conversion-worker",
-    "imageTagEnv": "CONVERSION_WORKER_IMAGE_TAG",
-    "ssmPath": "/pixaeron/production/conversion-worker",
-    "secureParameters": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-    "runtimeEnvFileEnv": "CONVERSION_WORKER_RUNTIME_ENV_FILE",
     "migrationCommand": ""
   }
 ]

@@ -6,6 +6,7 @@ WORKDIR /workspace
 
 COPY apps/gateway/supergraph.yaml ./apps/gateway/supergraph.yaml
 COPY apps/auth/schema.graphql ./apps/auth/schema.graphql
+COPY apps/conversion-api/schema.graphql ./apps/conversion-api/schema.graphql
 
 RUN rover supergraph compose \
   --skip-update-check \
