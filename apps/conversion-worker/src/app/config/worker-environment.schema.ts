@@ -21,7 +21,7 @@ export const workerEnvironmentSchema = Joi.object({
     then: sqsQueueSuffix,
     otherwise: sqsQueueSuffix.required(),
   }),
-  CONVERSION_LARGE_FILE_BYTES: Joi.number()
+  WORKER_MAX_INPUT_BYTES: Joi.number()
     .integer()
     .min(1_048_576)
     .required()

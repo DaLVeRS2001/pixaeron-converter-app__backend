@@ -7,7 +7,7 @@ import { ImageCompressorService } from './image-compressor.service';
 const service = (overrides: Record<string, string> = {}) =>
   new ImageCompressorService(
     new ConfigService({
-      CONVERSION_LARGE_FILE_BYTES: '26214400',
+      WORKER_MAX_INPUT_BYTES: '26214400',
       WORKER_MAX_PIXELS: '50000000',
       ...overrides,
     }),
@@ -291,7 +291,7 @@ describe('ImageCompressorService', () => {
 
     expect(
       await service({
-        CONVERSION_LARGE_FILE_BYTES: '1048576',
+        WORKER_MAX_INPUT_BYTES: '1048576',
       }).compress(Buffer.concat([input, Buffer.alloc(1_048_577)])),
     ).toEqual({ ok: false, failureCode: 'INPUT_TOO_LARGE' });
   });
@@ -304,7 +304,7 @@ describe('ImageCompressorService', () => {
     ).toMatchObject({ ok: true });
     const limited = new ImageCompressorService(
       new ConfigService({
-        CONVERSION_LARGE_FILE_BYTES: '26214400',
+        WORKER_MAX_INPUT_BYTES: '26214400',
         WORKER_MAX_PIXELS: '30000',
       }),
     );

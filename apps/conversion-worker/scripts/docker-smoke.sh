@@ -27,7 +27,7 @@ start_worker() {
     --env AWS_SECRET_ACCESS_KEY=example-secret-access-key-that-is-40-characters \
     --env CONVERSION_S3_BUCKET=pixaeron-conversion-smoke \
     --env SQS_QUEUE_SUFFIX=-smoke \
-    --env CONVERSION_LARGE_FILE_BYTES=26214400 \
+    --env WORKER_MAX_INPUT_BYTES=26214400 \
     --env WORKER_MAX_PIXELS=50000000 \
     --env WORKER_PROGRESS_FILE=/tmp/pixaeron-worker-progress \
     "$@" \

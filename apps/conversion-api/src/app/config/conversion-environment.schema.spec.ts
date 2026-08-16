@@ -16,7 +16,7 @@ const validEnvironment: Record<string, string> = {
   SQS_QUEUE_SUFFIX: '-dev',
   ENTITLEMENTS_GRPC_URL: '127.0.0.1:50053',
   ENTITLEMENTS_GRPC_DEADLINE_MS: '2000',
-  CONVERSION_LARGE_FILE_BYTES: '26214400',
+  CONVERSION_LARGE_QUEUE_BYTES: '26214400',
 };
 
 const validate = (overrides: Record<string, string | undefined> = {}) => {

@@ -21,7 +21,7 @@ const proSnapshot: EntitlementSnapshot = {
 describe('ConversionResolver entitlement sizing', () => {
   const buildResolver = (snapshot: EntitlementSnapshot) => {
     const admission = {
-      largeFileBytes: 26214400,
+      largeQueueBytes: 26214400,
       remainingToday: jest.fn(),
     };
     const entitlements = {

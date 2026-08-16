@@ -106,14 +106,14 @@ type ClaimedFile = {
 
 @Injectable()
 export class AdmissionService {
-  readonly largeFileBytes: number;
+  readonly largeQueueBytes: number;
 
   constructor(
     private readonly prisma: PrismaService,
     configService: ConfigService,
   ) {
-    this.largeFileBytes = Number(
-      configService.getOrThrow<string>('CONVERSION_LARGE_FILE_BYTES'),
+    this.largeQueueBytes = Number(
+      configService.getOrThrow<string>('CONVERSION_LARGE_QUEUE_BYTES'),
     );
   }
 
@@ -322,7 +322,7 @@ export class AdmissionService {
         data: claimed.map((file) => ({
           queue:
             snapshot.queueTier >= FIRST_PAID_TIER &&
-            Number(file.input_bytes) > this.largeFileBytes
+            Number(file.input_bytes) > this.largeQueueBytes
               ? PAID_LARGE_QUEUE
               : tierQueue,
           payload: {
