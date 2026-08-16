@@ -28,6 +28,11 @@ headers:
               named: x-forwarded-host
           - propagate:
               named: x-forwarded-proto
+    conversion-api:
+      request:
+        operations:
+          - propagate:
+              named: x-forwarded-for
 
 authentication:
   router:
@@ -61,6 +66,10 @@ include_subgraph_errors:
         - code
         - action
         - retryAfter
+    conversion-api:
+      redact_message: false
+      allow_extensions_keys:
+        - code
 
 homepage:
   enabled: false

@@ -4,3 +4,7 @@ subgraphs:
     routing_url: http://auth:3000/auth
     schema:
       file: ../auth/schema.graphql
+  conversion-api:
+    routing_url: http://conversion-api:3005/conversion
+    schema:
+      file: ../conversion-api/schema.graphql

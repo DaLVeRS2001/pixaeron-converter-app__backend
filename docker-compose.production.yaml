@@ -75,6 +75,8 @@ services:
       NOTIFICATIONS_GRPC_URL: notifications-command:50052
       NOTIFICATIONS_GRPC_DEADLINE_MS: 2000
       EMAIL_ACTION_RESPONSE_BUDGET_MS: 2500
+      ENTITLEMENTS_GRPC_HOST: auth-entitlements
+      ENTITLEMENTS_GRPC_PORT: 50053
     # Host-private operations and rollback endpoint; never routed publicly by Caddy.
     ports:
       - '127.0.0.1:3000:3000'
@@ -102,8 +104,53 @@ services:
         max-size: 10m
         max-file: '5'
     networks:
-      - default
-      - notifications_command
+      default:
+      notifications_command:
+      entitlements_command:
+        aliases:
+          - auth-entitlements
+
+  conversion-api:
+    image: ghcr.io/dalvers2001/pixaeron-conversion-api:${CONVERSION_API_IMAGE_TAG:-sha-not-configured}
+    restart: unless-stopped
+    env_file:
+      - path: ${CONVERSION_API_RUNTIME_ENV_FILE:-/opt/pixaeron/conversion-api.env}
+        format: raw
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      REDIS_URL: redis://redis:6379
+      ENTITLEMENTS_GRPC_URL: auth-entitlements:50053
+      ENTITLEMENTS_GRPC_DEADLINE_MS: 2000
+    volumes:
+      - ${PIXAERON_CERTS_DIR:-/opt/pixaeron/certs}/global-bundle.pem:/app/certs/global-bundle.pem:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3005/conversion/health/ready').then((response) => {
+            if (!response.ok) process.exit(1);
+          }).catch(() => process.exit(1));
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    networks:
+      default:
+      entitlements_command:
 
   gateway:
     image: ghcr.io/dalvers2001/pixaeron-gateway:${GATEWAY_IMAGE_TAG:-sha-not-configured}
@@ -142,6 +189,8 @@ networks:
   notifications_command:
     internal: true
   notifications_egress:
+  entitlements_command:
+    internal: true
 
 volumes:
   redis_data:
