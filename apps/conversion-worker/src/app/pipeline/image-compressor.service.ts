@@ -127,10 +127,10 @@ export class ImageCompressorService {
       const quantized = await sanitizedPipeline()
         .png({
           palette: true,
-          quality: 65,
-          effort: 7,
+          quality: 60,
+          effort: 10,
           compressionLevel: 9,
-          adaptiveFiltering: true,
+          adaptiveFiltering: false,
         })
         .toBuffer({ resolveWithObject: true })
         .catch(() => encoded);

@@ -219,13 +219,15 @@ describe('ImageCompressorService', () => {
   });
 
   it('denies NO_SAVINGS to a PNG carrying a text chunk', async () => {
-    const clean = await gradientImage(64, 64)
-      .png({ palette: true, colours: 16 })
+    const clean = await gradientImage(192, 192)
+      .png({
+        palette: true,
+        colours: 2,
+        compressionLevel: 9,
+        effort: 10,
+        adaptiveFiltering: false,
+      })
       .toBuffer();
-    const reencoded = await sharp(clean)
-      .png({ compressionLevel: 9, adaptiveFiltering: true })
-      .toBuffer();
-    expect(reencoded.length).toBeGreaterThan(clean.length + 64);
     const payload = Buffer.from('parameters\0secret prompt', 'latin1');
     const typeAndData = Buffer.concat([Buffer.from('tEXt', 'latin1'), payload]);
     const checksum = Buffer.alloc(4);
@@ -249,7 +251,12 @@ describe('ImageCompressorService', () => {
     const result = await service().compress(withText);
 
     expect(result).toMatchObject({ ok: true, kind: 'SANITIZED_LARGER' });
-    if (result.ok) expect(result.bytes.equals(withText)).toBe(false);
+    if (result.ok) {
+      expect(result.bytes.equals(withText)).toBe(false);
+      expect(
+        result.bytes.includes(Buffer.from('secret prompt', 'latin1')),
+      ).toBe(false);
+    }
   });
 
   it('denies NO_SAVINGS to a JPEG with bytes appended after EOI', async () => {
