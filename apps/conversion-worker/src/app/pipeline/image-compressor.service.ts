@@ -89,11 +89,14 @@ export class ImageCompressorService {
       return { ok: false, failureCode: 'PIXELS_EXCEEDED' };
     }
 
-    let encoded: { data: Buffer; info: OutputInfo };
-    try {
-      let pipeline = sharp(input, { limitInputPixels: this.maxPixels })
+    const sanitizedPipeline = () =>
+      sharp(input, { limitInputPixels: this.maxPixels })
         .rotate()
         .keepIccProfile();
+
+    let encoded: { data: Buffer; info: OutputInfo };
+    try {
+      let pipeline = sanitizedPipeline();
       switch (format) {
         case 'jpeg':
           pipeline = pipeline.jpeg({ quality: 75, mozjpeg: true });
@@ -118,6 +121,25 @@ export class ImageCompressorService {
       encoded = await pipeline.toBuffer({ resolveWithObject: true });
     } catch {
       return { ok: false, failureCode: 'DECODE_FAILED' };
+    }
+
+    if (format === 'png') {
+      const quantized = await sanitizedPipeline()
+        .png({
+          palette: true,
+          quality: 65,
+          effort: 7,
+          compressionLevel: 9,
+          adaptiveFiltering: true,
+        })
+        .toBuffer({ resolveWithObject: true })
+        .catch(() => encoded);
+      if (
+        quantized.data.length < encoded.data.length &&
+        quantized.data.length < input.length
+      ) {
+        encoded = quantized;
+      }
     }
 
     const shape = {

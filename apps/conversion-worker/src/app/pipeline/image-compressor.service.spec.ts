@@ -23,6 +23,25 @@ const noisyImage = (width: number, height: number) => {
   return sharp(pixels, { raw: { width, height, channels: 3 } });
 };
 
+const artworkImage = (width: number, height: number) => {
+  const pixels = Buffer.alloc(width * height * 3);
+  let seed = 7;
+  const next = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed;
+  };
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const block = Math.floor(y / 16) * 25 + Math.floor(x / 16);
+      const offset = (y * width + x) * 3;
+      pixels[offset] = (block * 97) % 256 ^ next() % 7;
+      pixels[offset + 1] = (block * 57) % 256 ^ next() % 7;
+      pixels[offset + 2] = (block * 17) % 256 ^ next() % 7;
+    }
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } });
+};
+
 const gradientImage = (width: number, height: number) => {
   const pixels = Buffer.alloc(width * height * 3);
   for (let y = 0; y < height; y++) {
@@ -68,6 +87,36 @@ describe('ImageCompressorService', () => {
       }
     },
   );
+
+  it('quantizes a many-coloured png to a palette when that beats lossless', async () => {
+    const input = await artworkImage(400, 400)
+      .png({ compressionLevel: 1 })
+      .toBuffer();
+
+    const result = await service().compress(input);
+
+    expect(result).toMatchObject({ ok: true, kind: 'SAVED', format: 'png' });
+    if (result.ok) {
+      const metadata = await sharp(result.bytes).metadata();
+      expect(metadata.format).toBe('png');
+      expect(metadata.isPalette).toBe(true);
+      expect(result.bytes.length).toBeLessThan(input.length * 0.6);
+    }
+  });
+
+  it('keeps the lossless encoding when the palette would inflate a smooth png', async () => {
+    const input = await gradientImage(600, 400)
+      .png({ compressionLevel: 1 })
+      .toBuffer();
+
+    const result = await service().compress(input);
+
+    expect(result).toMatchObject({ ok: true, kind: 'SAVED', format: 'png' });
+    if (result.ok) {
+      expect((await sharp(result.bytes).metadata()).isPalette).toBe(false);
+      expect(result.bytes.length).toBeLessThan(input.length);
+    }
+  });
 
   it('returns the original bytes as NO_SAVINGS when clean input cannot shrink', async () => {
     const input = await sharp({
