@@ -8,6 +8,7 @@ export {
   Context,
   Directive,
   Field,
+  Float,
   GqlExecutionContext,
   GraphQLModule,
   GraphQLSchemaBuilderModule,

@@ -13,6 +13,7 @@ import {
   Args,
   Context,
   ID,
+  Int,
   Mutation,
   Query,
   Resolver,
@@ -41,6 +42,7 @@ import { CreateConversionBatchInput } from './dto/create-conversion-batch.input'
 import {
   CompleteConversionUploadsPayload,
   ConversionBatch,
+  ConversionBatchPage,
   ConversionEntitlement,
   ConversionFile,
 } from './models/conversion.model';
@@ -64,6 +66,7 @@ const ADMISSION_STATUS: Record<AdmissionErrorCode, HttpStatus> = {
   FILE_NOT_MEASURED: HttpStatus.CONFLICT,
   FILE_TOO_LARGE: HttpStatus.BAD_REQUEST,
   IDEMPOTENCY_CONFLICT: HttpStatus.CONFLICT,
+  STORAGE_LIMIT_EXCEEDED: HttpStatus.INSUFFICIENT_STORAGE,
 };
 
 @Resolver()
@@ -187,6 +190,45 @@ export class ConversionResolver {
               snapshot.dailyFiles,
             ),
       maxConcurrentFiles: snapshot.maxConcurrentFiles,
+      storageBytes: snapshot.storageBytes ?? null,
+      storageBytesUsed:
+        snapshot.storageBytes === undefined
+          ? null
+          : await this.admission.storageBytesUsed(identity.subject),
+    };
+  }
+
+  @Query(() => ConversionBatchPage)
+  async myConversionBatches(
+    @Args('limit', { type: () => Int, nullable: true }) limit: number | null,
+    @Args('offset', { type: () => Int, nullable: true }) offset: number | null,
+    @Context() context: HttpContext,
+  ): Promise<ConversionBatchPage> {
+    const identity = this.identityFrom(context);
+    if (!identity.userPublicId) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.UNAUTHORIZED,
+          code: 'UNAUTHENTICATED',
+          message: 'Sign in to list your conversions',
+        },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const page = await this.admission.listBatches(
+      identity.subject,
+      Math.min(Math.max(limit ?? 20, 1), 50),
+      Math.max(offset ?? 0, 0),
+    );
+
+    return {
+      items: await Promise.all(
+        page.items.map((batch) =>
+          this.toBatchModel(batch, batch.files, null, null),
+        ),
+      ),
+      total: page.total,
     };
   }
 

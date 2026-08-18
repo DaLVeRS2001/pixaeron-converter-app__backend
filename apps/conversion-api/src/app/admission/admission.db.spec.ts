@@ -114,6 +114,99 @@ describe('AdmissionService on Postgres', () => {
     return created;
   };
 
+  const cappedSnapshot: EntitlementSnapshot = {
+    ...proSnapshot,
+    planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_FREE,
+    queueTier: 1,
+    storageBytes: 3000,
+  };
+
+  const completeFiles = async (batchId: string, outputBytes: number) => {
+    await prisma.conversionFile.updateMany({
+      where: { batchId },
+      data: { status: ConversionFileStatus.COMPLETED, outputBytes },
+    });
+  };
+
+  it('evicts the oldest stored results when a new batch would not fit', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+
+    const oldest = await readyBatch(subject, cappedSnapshot, 1, 1400);
+    await service.admitReadyFiles(oldest.batch.id, { subject }, cappedSnapshot);
+    await completeFiles(oldest.batch.id, 1400);
+    await prisma.conversionBatch.update({
+      where: { id: oldest.batch.id },
+      data: { status: ConversionBatchStatus.COMPLETED },
+    });
+
+    const kept = await readyBatch(subject, cappedSnapshot, 1, 1200);
+    await service.admitReadyFiles(kept.batch.id, { subject }, cappedSnapshot);
+    await completeFiles(kept.batch.id, 1200);
+
+    const incoming = await readyBatch(subject, cappedSnapshot, 1, 1300);
+    const admitted = await service.admitReadyFiles(
+      incoming.batch.id,
+      { subject },
+      cappedSnapshot,
+    );
+    expect(admitted.admittedFiles).toBe(1);
+
+    const oldestFiles = await prisma.conversionFile.findMany({
+      where: { batchId: oldest.batch.id },
+    });
+    const keptFiles = await prisma.conversionFile.findMany({
+      where: { batchId: kept.batch.id },
+    });
+    expect(oldestFiles.map(({ status }) => status)).toEqual([
+      ConversionFileStatus.EXPIRED,
+    ]);
+    expect(keptFiles.map(({ status }) => status)).toEqual([
+      ConversionFileStatus.COMPLETED,
+    ]);
+
+    const evictedBatch = await prisma.conversionBatch.findUniqueOrThrow({
+      where: { id: oldest.batch.id },
+    });
+    expect(evictedBatch.status).toBe(ConversionBatchStatus.EXPIRED);
+  });
+
+  it('leaves stored results alone while the new batch still fits', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+
+    const stored = await readyBatch(subject, cappedSnapshot, 1, 1000);
+    await service.admitReadyFiles(stored.batch.id, { subject }, cappedSnapshot);
+    await completeFiles(stored.batch.id, 1000);
+
+    const incoming = await readyBatch(subject, cappedSnapshot, 1, 1500);
+    await service.admitReadyFiles(
+      incoming.batch.id,
+      { subject },
+      cappedSnapshot,
+    );
+
+    const storedFiles = await prisma.conversionFile.findMany({
+      where: { batchId: stored.batch.id },
+    });
+    expect(storedFiles.map(({ status }) => status)).toEqual([
+      ConversionFileStatus.COMPLETED,
+    ]);
+  });
+
+  it('refuses admission only when evicting everything still cannot fit', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+
+    const first = await readyBatch(subject, cappedSnapshot, 1, 1600);
+    await service.admitReadyFiles(first.batch.id, { subject }, cappedSnapshot);
+
+    const second = await readyBatch(subject, cappedSnapshot, 1, 1600);
+    await expect(
+      service.admitReadyFiles(second.batch.id, { subject }, cappedSnapshot),
+    ).rejects.toMatchObject({ code: 'STORAGE_LIMIT_EXCEEDED' });
+  });
+
   it('enforces the daily quota exactly under parallel admission', async () => {
     const subject = anonSubject();
     const batches = [];

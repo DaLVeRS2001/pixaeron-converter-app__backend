@@ -34,6 +34,7 @@ describe('plans seed on Postgres', () => {
         queueTier: plan.queueTier,
         minStartDelayMs: plan.minStartDelayMs,
         outputRetentionHours: plan.outputRetentionHours,
+        storageBytes: plan.storageBytes,
       })),
     ).toEqual([
       {
@@ -46,6 +47,7 @@ describe('plans seed on Postgres', () => {
         queueTier: 0,
         minStartDelayMs: 0,
         outputRetentionHours: 1,
+        storageBytes: null,
       },
       {
         code: PlanCode.FREE,
@@ -57,6 +59,7 @@ describe('plans seed on Postgres', () => {
         queueTier: 1,
         minStartDelayMs: 0,
         outputRetentionHours: 48,
+        storageBytes: BigInt(1073741824),
       },
       {
         code: PlanCode.LIGHT,
@@ -68,6 +71,7 @@ describe('plans seed on Postgres', () => {
         queueTier: 2,
         minStartDelayMs: 0,
         outputRetentionHours: 168,
+        storageBytes: BigInt(2147483648),
       },
       {
         code: PlanCode.PRO,
@@ -79,6 +83,7 @@ describe('plans seed on Postgres', () => {
         queueTier: 3,
         minStartDelayMs: 0,
         outputRetentionHours: 168,
+        storageBytes: BigInt(10737418240),
       },
     ]);
   });

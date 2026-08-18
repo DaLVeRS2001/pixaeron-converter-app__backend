@@ -1,5 +1,6 @@
 import {
   Field,
+  Float,
   ID,
   Int,
   ObjectType,
@@ -127,4 +128,19 @@ export class ConversionEntitlement {
 
   @Field(() => Int)
   maxConcurrentFiles!: number;
+
+  @Field(() => Float, { nullable: true })
+  storageBytes!: number | null;
+
+  @Field(() => Float, { nullable: true })
+  storageBytesUsed!: number | null;
+}
+
+@ObjectType()
+export class ConversionBatchPage {
+  @Field(() => [ConversionBatch])
+  items!: ConversionBatch[];
+
+  @Field(() => Int)
+  total!: number;
 }

@@ -132,6 +132,8 @@ type ConversionEntitlement {
   dailyFiles: Int
   remainingToday: Int
   maxConcurrentFiles: Int!
+  storageBytes: Float
+  storageBytesUsed: Float
 }
 
 enum ConversionPlanCode {
@@ -141,9 +143,15 @@ enum ConversionPlanCode {
   PRO
 }
 
+type ConversionBatchPage {
+  items: [ConversionBatch!]!
+  total: Int!
+}
+
 type Query {
   conversionBatch(id: ID!, batchToken: String): ConversionBatch!
   conversionEntitlement: ConversionEntitlement!
+  myConversionBatches(limit: Int, offset: Int): ConversionBatchPage!
   _service: _Service!
 }
 

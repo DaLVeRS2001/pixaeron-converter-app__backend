@@ -36,4 +36,5 @@ message EntitlementSnapshot {
   uint32 queue_tier = 8;
   uint32 min_start_delay_ms = 9;
   uint32 output_retention_hours = 10;
+  optional uint64 storage_bytes = 11;
 }
