@@ -9,6 +9,18 @@ fn supergraph_service(service) {
 }
 
 fn subgraph_service(service, subgraph) {
+  if subgraph == "conversion-api" {
+    let forward_verified_subject = |request| {
+      let claims = request.context["apollo::authentication::jwt_claims"];
+      if claims != () && "sub" in claims {
+        request.subgraph.headers["x-authenticated-sub"] = claims["sub"];
+      }
+    };
+
+    service.map_request(forward_verified_subject);
+    return;
+  }
+
   if subgraph != "auth" {
     return;
   }

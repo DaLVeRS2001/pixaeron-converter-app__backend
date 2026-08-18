@@ -208,6 +208,27 @@ describe('AdmissionService on Postgres', () => {
     expect(usage.admittedFiles).toBe(2);
   });
 
+  it('owns a signed-in batch by subject alone, with no minted token', async () => {
+    const subject = `user:${randomUUID()}`;
+    const created = await service.createBatch(
+      { subject, anonymous: false, idempotencyKey: randomUUID(), fileCount: 1 },
+      anonymousSnapshot,
+    );
+    batchIds.push(created.batch.id);
+
+    expect(created.batchToken).toBeNull();
+    expect(created.batch.batchTokenHash).toBeNull();
+
+    const reread = await service.getOwnedBatch(created.batch.id, { subject });
+    expect(reread.id).toBe(created.batch.id);
+
+    await expect(
+      service.getOwnedBatch(created.batch.id, {
+        subject: `user:${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({ code: 'BATCH_NOT_FOUND' });
+  });
+
   it('admits files that become ready after the first admission', async () => {
     const subject = anonSubject();
     const created = await service.createBatch(
