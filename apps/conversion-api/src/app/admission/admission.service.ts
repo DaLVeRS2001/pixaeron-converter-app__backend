@@ -31,6 +31,7 @@ import { isUniqueConstraintError } from '../prisma/prisma.support';
 const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const RETENTION_CLASS_BY_HOURS: Record<number, ConversionRetentionClass> = {
+  4: 'short',
   48: 'standard',
   168: 'extended',
 };

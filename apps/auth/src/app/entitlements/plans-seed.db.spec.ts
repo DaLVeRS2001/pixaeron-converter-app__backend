@@ -45,7 +45,7 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 1,
         queueTier: 0,
         minStartDelayMs: 0,
-        outputRetentionHours: 48,
+        outputRetentionHours: 4,
       },
       {
         code: PlanCode.FREE,

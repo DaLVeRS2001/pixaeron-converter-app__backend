@@ -25,7 +25,7 @@ export const isMember = <T extends string>(
   value: unknown,
 ): value is T => values.includes(value as T);
 
-export const RETENTION_CLASSES = ['standard', 'extended'] as const;
+export const RETENTION_CLASSES = ['short', 'standard', 'extended'] as const;
 
 export type ConversionRetentionClass = (typeof RETENTION_CLASSES)[number];
 
