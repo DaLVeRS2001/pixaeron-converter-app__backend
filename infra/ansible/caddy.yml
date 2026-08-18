@@ -85,6 +85,7 @@
         status_code: 200
         return_content: false
       changed_when: false
+      check_mode: false
 
     - name: Verify the private Auth JWKS before cutover
       ansible.builtin.uri:
@@ -93,6 +94,7 @@
         return_content: true
       register: auth_jwks_check
       changed_when: false
+      check_mode: false
 
     - name: Require at least one Auth public key before cutover
       ansible.builtin.assert:
