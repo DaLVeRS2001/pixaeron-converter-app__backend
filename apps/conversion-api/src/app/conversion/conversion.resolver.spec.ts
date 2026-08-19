@@ -149,7 +149,7 @@ describe('ConversionResolver request identity', () => {
 
   it('trusts the router-verified subject header', () => {
     const identity = identityFrom({
-      'x-authenticated-sub': '3f2c1a84-9d5e-4b7a-8c6f-0e1d2a3b4c5d',
+      'x-authenticated-sub': '3f2c1a84-9d5e-4b7a-8c6f-0e1d2a3b4c5d', // gitleaks:allow
     });
 
     expect(identity).toEqual({
