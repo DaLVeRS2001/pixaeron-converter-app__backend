@@ -34,6 +34,7 @@ const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RETENTION_CLASS_BY_HOURS: Record<number, ConversionRetentionClass> = {
   1: 'short',
   48: 'standard',
+  96: 'extended',
   168: 'extended',
 };
 
