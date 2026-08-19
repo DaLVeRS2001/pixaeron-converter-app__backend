@@ -34,6 +34,7 @@ describe('plans seed on Postgres', () => {
         queueTier: plan.queueTier,
         minStartDelayMs: plan.minStartDelayMs,
         outputRetentionHours: plan.outputRetentionHours,
+        storageBytes: plan.storageBytes,
       })),
     ).toEqual([
       {
@@ -45,7 +46,8 @@ describe('plans seed on Postgres', () => {
         maxConcurrentFiles: 1,
         queueTier: 0,
         minStartDelayMs: 0,
-        outputRetentionHours: 48,
+        outputRetentionHours: 1,
+        storageBytes: null,
       },
       {
         code: PlanCode.FREE,
@@ -57,17 +59,19 @@ describe('plans seed on Postgres', () => {
         queueTier: 1,
         minStartDelayMs: 0,
         outputRetentionHours: 48,
+        storageBytes: BigInt(1073741824),
       },
       {
         code: PlanCode.LIGHT,
         priceCentsMonthly: 225,
         maxBatchFiles: 10,
-        maxFileBytes: 75 * 1024 * 1024,
+        maxFileBytes: 50 * 1024 * 1024,
         dailyFiles: null,
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,
-        outputRetentionHours: 168,
+        outputRetentionHours: 96,
+        storageBytes: BigInt(2147483648),
       },
       {
         code: PlanCode.PRO,
@@ -79,6 +83,7 @@ describe('plans seed on Postgres', () => {
         queueTier: 3,
         minStartDelayMs: 0,
         outputRetentionHours: 168,
+        storageBytes: BigInt(10737418240),
       },
     ]);
   });
@@ -90,7 +95,7 @@ describe('plans seed on Postgres', () => {
         code: PlanCode.LIGHT,
         revision: 2,
         maxBatchFiles: 12,
-        maxFileBytes: 75 * 1024 * 1024,
+        maxFileBytes: 50 * 1024 * 1024,
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,
@@ -103,7 +108,7 @@ describe('plans seed on Postgres', () => {
         revision: 3,
         effectiveFrom: new Date(Date.now() + 86_400_000),
         maxBatchFiles: 99,
-        maxFileBytes: 75 * 1024 * 1024,
+        maxFileBytes: 50 * 1024 * 1024,
         maxConcurrentFiles: 3,
         queueTier: 2,
         minStartDelayMs: 0,

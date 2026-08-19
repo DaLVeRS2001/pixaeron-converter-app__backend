@@ -25,13 +25,16 @@ import {
   type ConversionBatch,
   type ConversionFile,
 } from '../../generated/prisma/client';
+import { rollUpBatch } from '../lifecycle/batch-rollup';
 import { PrismaService } from '../prisma/prisma.service';
 import { isUniqueConstraintError } from '../prisma/prisma.support';
 
 const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const RETENTION_CLASS_BY_HOURS: Record<number, ConversionRetentionClass> = {
+  1: 'short',
   48: 'standard',
+  96: 'extended',
   168: 'extended',
 };
 
@@ -64,7 +67,8 @@ export type AdmissionErrorCode =
   | 'DAILY_QUOTA_EXCEEDED'
   | 'FILE_NOT_MEASURED'
   | 'FILE_TOO_LARGE'
-  | 'IDEMPOTENCY_CONFLICT';
+  | 'IDEMPOTENCY_CONFLICT'
+  | 'STORAGE_LIMIT_EXCEEDED';
 
 export class AdmissionError extends Error {
   constructor(readonly code: AdmissionErrorCode) {
@@ -239,6 +243,12 @@ export class AdmissionService {
     }
 
     return this.prisma.$transaction(async (transaction) => {
+      if (snapshot.storageBytes !== undefined) {
+        await transaction.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${batch.subject}, 42))::text AS locked
+        `;
+      }
+
       await transaction.$queryRaw`
         SELECT 1 FROM "conversion_batches" WHERE "id" = ${batch.id} FOR UPDATE
       `;
@@ -265,6 +275,59 @@ export class AdmissionService {
         }
         if (Number(file.input_bytes) > snapshot.maxFileBytes) {
           throw new AdmissionError('FILE_TOO_LARGE');
+        }
+      }
+
+      if (snapshot.storageBytes !== undefined) {
+        const incomingBytes = claimed.reduce(
+          (sum, file) => sum + Number(file.input_bytes),
+          0,
+        );
+        let deficit =
+          (await this.storageUsedFor(transaction, batch.subject)) +
+          incomingBytes -
+          snapshot.storageBytes;
+        if (deficit > 0) {
+          await transaction.$queryRaw`
+            SELECT "id" FROM "conversion_batches"
+            WHERE "subject" = ${batch.subject}
+            FOR UPDATE
+          `;
+
+          const evictable = await transaction.$queryRaw<
+            Array<{ id: string; batch_id: string; bytes: bigint | null }>
+          >`
+            SELECT f."id", f."batch_id", f."output_bytes" AS bytes
+            FROM "conversion_files" f
+            JOIN "conversion_batches" b ON b."id" = f."batch_id"
+            WHERE b."subject" = ${batch.subject}
+              AND f."status" = 'COMPLETED'
+              AND f."expires_at" > now()
+            ORDER BY f."expires_at" ASC, f."id" ASC
+            FOR UPDATE OF f
+          `;
+
+          const evicted: Array<{ id: string; batch_id: string }> = [];
+          for (const candidate of evictable) {
+            if (deficit <= 0) break;
+
+            evicted.push(candidate);
+            deficit -= Number(candidate.bytes ?? 0);
+          }
+          if (deficit > 0) throw new AdmissionError('STORAGE_LIMIT_EXCEEDED');
+
+          await transaction.conversionFile.updateMany({
+            where: { id: { in: evicted.map(({ id }) => id) } },
+            data: {
+              status: ConversionFileStatus.EXPIRED,
+              expiresAt: new Date(),
+            },
+          });
+          for (const evictedBatchId of new Set(
+            evicted.map(({ batch_id }) => batch_id),
+          )) {
+            await rollUpBatch(transaction, evictedBatchId);
+          }
         }
       }
 
@@ -344,6 +407,50 @@ export class AdmissionService {
         admittedFiles: claimed.length,
       };
     });
+  }
+
+  async listBatches(
+    subject: string,
+    limit: number,
+    offset: number,
+  ): Promise<{
+    items: Array<ConversionBatch & { files: ConversionFile[] }>;
+    total: number;
+  }> {
+    const [items, total] = await Promise.all([
+      this.prisma.conversionBatch.findMany({
+        where: { subject },
+        include: { files: { orderBy: { id: 'asc' } } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.conversionBatch.count({ where: { subject } }),
+    ]);
+
+    return { items, total };
+  }
+
+  async storageBytesUsed(subject: string): Promise<number> {
+    return this.storageUsedFor(this.prisma, subject);
+  }
+
+  private async storageUsedFor(
+    client: Prisma.TransactionClient,
+    subject: string,
+  ): Promise<number> {
+    const rows = await client.$queryRaw<Array<{ used: bigint | null }>>`
+      SELECT SUM(
+        CASE WHEN f."status" = 'COMPLETED' THEN f."output_bytes" ELSE f."input_bytes" END
+      )::bigint AS used
+      FROM "conversion_files" f
+      JOIN "conversion_batches" b ON b."id" = f."batch_id"
+      WHERE b."subject" = ${subject}
+        AND f."status" IN ('QUEUED', 'PROCESSING', 'COMPLETED')
+        AND f."expires_at" > now()
+    `;
+
+    return Number(rows[0]?.used ?? 0);
   }
 
   async remainingToday(subject: string, dailyFiles: number): Promise<number> {

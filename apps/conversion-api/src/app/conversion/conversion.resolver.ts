@@ -1,3 +1,4 @@
+import { status as grpcStatus } from '@grpc/grpc-js';
 import {
   HttpException,
   HttpStatus,
@@ -12,6 +13,7 @@ import {
   Args,
   Context,
   ID,
+  Int,
   Mutation,
   Query,
   Resolver,
@@ -40,9 +42,20 @@ import { CreateConversionBatchInput } from './dto/create-conversion-batch.input'
 import {
   CompleteConversionUploadsPayload,
   ConversionBatch,
+  ConversionBatchPage,
   ConversionEntitlement,
   ConversionFile,
 } from './models/conversion.model';
+
+const AUTHENTICATED_SUBJECT_HEADER = 'x-authenticated-sub';
+
+const USER_PUBLIC_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type RequestIdentity = {
+  subject: string;
+  userPublicId: string | null;
+};
 
 const ADMISSION_STATUS: Record<AdmissionErrorCode, HttpStatus> = {
   BATCH_NOT_FOUND: HttpStatus.NOT_FOUND,
@@ -53,6 +66,7 @@ const ADMISSION_STATUS: Record<AdmissionErrorCode, HttpStatus> = {
   FILE_NOT_MEASURED: HttpStatus.CONFLICT,
   FILE_TOO_LARGE: HttpStatus.BAD_REQUEST,
   IDEMPOTENCY_CONFLICT: HttpStatus.CONFLICT,
+  STORAGE_LIMIT_EXCEEDED: HttpStatus.INSUFFICIENT_STORAGE,
 };
 
 @Resolver()
@@ -71,13 +85,14 @@ export class ConversionResolver {
     @Args('input') input: CreateConversionBatchInput,
     @Context() context: HttpContext,
   ): Promise<ConversionBatch> {
-    const snapshot = await this.anonymousSnapshotCappedToServedSizes();
+    const identity = this.identityFrom(context);
+    const snapshot = await this.snapshotCappedToServedSizes(identity);
 
     try {
       const created = await this.admission.createBatch(
         {
-          subject: this.subjectFrom(context),
-          anonymous: true,
+          subject: identity.subject,
+          anonymous: identity.userPublicId === null,
           idempotencyKey: input.idempotencyKey,
           fileCount: input.fileCount,
           batchToken: input.batchToken,
@@ -102,9 +117,10 @@ export class ConversionResolver {
     @Args('input') input: CompleteConversionUploadsInput,
     @Context() context: HttpContext,
   ): Promise<CompleteConversionUploadsPayload> {
-    const snapshot = await this.anonymousSnapshotCappedToServedSizes();
+    const identity = this.identityFrom(context);
+    const snapshot = await this.snapshotCappedToServedSizes(identity);
     const ownership: BatchOwnership = {
-      subject: this.subjectFrom(context),
+      subject: identity.subject,
       batchToken: input.batchToken,
     };
 
@@ -144,7 +160,7 @@ export class ConversionResolver {
   ): Promise<ConversionBatch> {
     try {
       const batch = await this.admission.getOwnedBatch(id, {
-        subject: this.subjectFrom(context),
+        subject: this.identityFrom(context).subject,
         batchToken,
       });
 
@@ -158,7 +174,8 @@ export class ConversionResolver {
   async conversionEntitlement(
     @Context() context: HttpContext,
   ): Promise<ConversionEntitlement> {
-    const snapshot = await this.anonymousSnapshotCappedToServedSizes();
+    const identity = this.identityFrom(context);
+    const snapshot = await this.snapshotCappedToServedSizes(identity);
 
     return {
       planCode: planCodeFor(snapshot),
@@ -169,20 +186,77 @@ export class ConversionResolver {
         snapshot.dailyFiles === undefined
           ? null
           : await this.admission.remainingToday(
-              this.subjectFrom(context),
+              identity.subject,
               snapshot.dailyFiles,
             ),
       maxConcurrentFiles: snapshot.maxConcurrentFiles,
+      storageBytes: snapshot.storageBytes ?? null,
+      storageBytesUsed:
+        snapshot.storageBytes === undefined
+          ? null
+          : await this.admission.storageBytesUsed(identity.subject),
     };
   }
 
-  private async anonymousSnapshotCappedToServedSizes(): Promise<EntitlementSnapshot> {
+  @Query(() => ConversionBatchPage)
+  async myConversionBatches(
+    @Args('limit', { type: () => Int, nullable: true }) limit: number | null,
+    @Args('offset', { type: () => Int, nullable: true }) offset: number | null,
+    @Context() context: HttpContext,
+  ): Promise<ConversionBatchPage> {
+    const identity = this.identityFrom(context);
+    if (!identity.userPublicId) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.UNAUTHORIZED,
+          code: 'UNAUTHENTICATED',
+          message: 'Sign in to list your conversions',
+        },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const page = await this.admission.listBatches(
+      identity.subject,
+      Math.min(Math.max(limit ?? 20, 1), 50),
+      Math.max(offset ?? 0, 0),
+    );
+
+    return {
+      items: await Promise.all(
+        page.items.map((batch) =>
+          this.toBatchModel(batch, batch.files, null, null),
+        ),
+      ),
+      total: page.total,
+    };
+  }
+
+  private async snapshotCappedToServedSizes(
+    identity: RequestIdentity,
+  ): Promise<EntitlementSnapshot> {
     let response;
     try {
-      response = await this.entitlements.getEntitlement({
-        planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
-      });
-    } catch {
+      response = await this.entitlements.getEntitlement(
+        identity.userPublicId
+          ? { subject: identity.userPublicId }
+          : { planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS },
+      );
+    } catch (error) {
+      if (
+        identity.userPublicId &&
+        (error as { code?: number }).code === grpcStatus.NOT_FOUND
+      ) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.UNAUTHORIZED,
+            code: 'SESSION_STALE',
+            message: 'The signed-in account no longer exists',
+          },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
       throw new ServiceUnavailableException({
         code: 'ENTITLEMENTS_UNAVAILABLE',
         message: 'Plan limits are temporarily unavailable',
@@ -201,11 +275,28 @@ export class ConversionResolver {
     };
   }
 
-  private subjectFrom(context: HttpContext): string {
+  private identityFrom(context: HttpContext): RequestIdentity {
     const request = context.req;
+    const header = request.headers[AUTHENTICATED_SUBJECT_HEADER];
+    const candidate = Array.isArray(header) ? header[0] : header;
+    if (candidate !== undefined) {
+      if (!USER_PUBLIC_ID_PATTERN.test(candidate)) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            code: 'IDENTITY_HEADER_INVALID',
+            message: 'The verified subject header is not a public identifier',
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      return { subject: `user:${candidate}`, userPublicId: candidate };
+    }
+
     const ip = request.ip || request.socket.remoteAddress || 'unknown';
 
-    return this.identity.subjectFor(ip);
+    return { subject: this.identity.subjectFor(ip), userPublicId: null };
   }
 
   private async toBatchModel(

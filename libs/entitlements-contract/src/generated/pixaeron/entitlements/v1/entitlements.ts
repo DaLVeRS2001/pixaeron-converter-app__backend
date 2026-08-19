@@ -35,6 +35,7 @@ export interface EntitlementSnapshot {
   queueTier: number;
   minStartDelayMs: number;
   outputRetentionHours: number;
+  storageBytes?: number | undefined;
 }
 
 export interface EntitlementsServiceClient {

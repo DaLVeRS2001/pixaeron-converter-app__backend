@@ -43,6 +43,8 @@ export class EntitlementsController implements EntitlementsServiceController {
         queueTier: plan.queueTier,
         minStartDelayMs: plan.minStartDelayMs,
         outputRetentionHours: plan.outputRetentionHours,
+        storageBytes:
+          plan.storageBytes === null ? undefined : Number(plan.storageBytes),
       },
     };
   }

@@ -19,6 +19,7 @@ const lightPlan = {
   queueTier: 2,
   minStartDelayMs: 0,
   outputRetentionHours: 48,
+  storageBytes: BigInt(2147483648),
   createdAt: new Date('2026-08-13T00:00:00Z'),
 };
 
@@ -48,6 +49,7 @@ describe('EntitlementsController', () => {
         queueTier: 2,
         minStartDelayMs: 0,
         outputRetentionHours: 48,
+        storageBytes: 2147483648,
       },
     });
     expect(planService.getPlanForSubject).toHaveBeenCalledWith(SUBJECT);
