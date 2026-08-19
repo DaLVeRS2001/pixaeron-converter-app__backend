@@ -32,6 +32,8 @@ export const workerEnvironmentSchema = Joi.object({
     .max(500_000_000)
     .required()
     .raw(),
+  WORKER_QUEUE_SET: Joi.string().valid('tiers', 'paid-large').default('tiers'),
+  WORKER_SLOTS: Joi.number().integer().min(1).max(16).default(1).raw(),
   WORKER_PROGRESS_FILE: Joi.string()
     .trim()
     .min(1)

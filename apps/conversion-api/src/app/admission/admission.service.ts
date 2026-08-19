@@ -110,7 +110,7 @@ type ClaimedFile = {
 
 @Injectable()
 export class AdmissionService {
-  readonly largeQueueBytes: number;
+  private readonly largeQueueBytes: number;
 
   constructor(
     private readonly prisma: PrismaService,

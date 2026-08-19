@@ -86,7 +86,7 @@ export class ConversionResolver {
     @Context() context: HttpContext,
   ): Promise<ConversionBatch> {
     const identity = this.identityFrom(context);
-    const snapshot = await this.snapshotCappedToServedSizes(identity);
+    const snapshot = await this.entitlementSnapshotFor(identity);
 
     try {
       const created = await this.admission.createBatch(
@@ -118,7 +118,7 @@ export class ConversionResolver {
     @Context() context: HttpContext,
   ): Promise<CompleteConversionUploadsPayload> {
     const identity = this.identityFrom(context);
-    const snapshot = await this.snapshotCappedToServedSizes(identity);
+    const snapshot = await this.entitlementSnapshotFor(identity);
     const ownership: BatchOwnership = {
       subject: identity.subject,
       batchToken: input.batchToken,
@@ -175,7 +175,7 @@ export class ConversionResolver {
     @Context() context: HttpContext,
   ): Promise<ConversionEntitlement> {
     const identity = this.identityFrom(context);
-    const snapshot = await this.snapshotCappedToServedSizes(identity);
+    const snapshot = await this.entitlementSnapshotFor(identity);
 
     return {
       planCode: planCodeFor(snapshot),
@@ -232,7 +232,7 @@ export class ConversionResolver {
     };
   }
 
-  private async snapshotCappedToServedSizes(
+  private async entitlementSnapshotFor(
     identity: RequestIdentity,
   ): Promise<EntitlementSnapshot> {
     let response;
@@ -266,13 +266,7 @@ export class ConversionResolver {
       throw new Error('Entitlement response carried no snapshot');
     }
 
-    return {
-      ...response.snapshot,
-      maxFileBytes: Math.min(
-        response.snapshot.maxFileBytes,
-        this.admission.largeQueueBytes,
-      ),
-    };
+    return response.snapshot;
   }
 
   private identityFrom(context: HttpContext): RequestIdentity {

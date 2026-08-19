@@ -52,6 +52,19 @@
     "migrationCommand": ""
   },
   {
+    "project": "conversion-worker",
+    "host": "worker",
+    "deploymentOrder": 21,
+    "imageName": "ghcr.io/dalvers2001/pixaeron-conversion-worker",
+    "dockerfile": "apps/conversion-worker/Dockerfile",
+    "composeService": "conversion-worker-large",
+    "imageTagEnv": "CONVERSION_WORKER_IMAGE_TAG",
+    "ssmPath": "/pixaeron/production/conversion-worker-large",
+    "secureParameters": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+    "runtimeEnvFileEnv": "CONVERSION_WORKER_LARGE_RUNTIME_ENV_FILE",
+    "migrationCommand": ""
+  },
+  {
     "project": "conversion-api",
     "host": "application",
     "deploymentOrder": 50,

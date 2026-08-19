@@ -7,6 +7,7 @@ import {
   type ConversionImageFormat,
   type ConversionResultKindName,
 } from '@pixaeron/conversion-contract';
+import { cpus } from 'node:os';
 import sharp, { type Metadata, type OutputInfo } from 'sharp';
 
 export type CompressionResult =
@@ -58,6 +59,8 @@ export class ImageCompressorService {
     this.maxPixels = Number(
       configService.getOrThrow<string>('WORKER_MAX_PIXELS'),
     );
+    const slots = Number(configService.getOrThrow<string>('WORKER_SLOTS'));
+    sharp.concurrency(Math.max(1, Math.floor(cpus().length / slots)));
   }
 
   async compress(input: Buffer): Promise<CompressionResult> {

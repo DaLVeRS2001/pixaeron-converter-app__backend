@@ -21,7 +21,6 @@ const proSnapshot: EntitlementSnapshot = {
 describe('ConversionResolver entitlement sizing', () => {
   const buildResolver = (snapshot: EntitlementSnapshot) => {
     const admission = {
-      largeQueueBytes: 26214400,
       remainingToday: jest.fn(),
     };
     const entitlements = {
@@ -43,32 +42,21 @@ describe('ConversionResolver entitlement sizing', () => {
     userPublicId: string | null;
   }) => Promise<EntitlementSnapshot>;
 
-  const cappedSnapshot = (
+  const snapshotFor = (
     resolver: ConversionResolver,
     userPublicId: string | null = null,
   ) =>
     (
-      resolver as unknown as { snapshotCappedToServedSizes: SnapshotFor }
-    ).snapshotCappedToServedSizes({ subject: 'anon:test', userPublicId });
+      resolver as unknown as { entitlementSnapshotFor: SnapshotFor }
+    ).entitlementSnapshotFor({ subject: 'anon:test', userPublicId });
 
-  it('caps a plan ceiling above the large-file threshold', async () => {
+  it('serves the plan ceiling untouched, large files included', async () => {
     const { resolver } = buildResolver(proSnapshot);
 
-    const snapshot = await cappedSnapshot(resolver);
+    const snapshot = await snapshotFor(resolver);
 
-    expect(snapshot.maxFileBytes).toBe(26214400);
+    expect(snapshot.maxFileBytes).toBe(157286400);
     expect(snapshot.maxBatchFiles).toBe(proSnapshot.maxBatchFiles);
-  });
-
-  it('leaves a plan ceiling below the threshold untouched', async () => {
-    const { resolver } = buildResolver({
-      ...proSnapshot,
-      planCode: EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
-      maxFileBytes: 5242880,
-      queueTier: 0,
-    });
-
-    expect((await cappedSnapshot(resolver)).maxFileBytes).toBe(5242880);
   });
 
   it('reports an unreachable entitlements channel as retryable', async () => {
@@ -79,7 +67,7 @@ describe('ConversionResolver entitlement sizing', () => {
       new Error('14 UNAVAILABLE: no connection established'),
     );
 
-    await expect(cappedSnapshot(resolver)).rejects.toMatchObject({
+    await expect(snapshotFor(resolver)).rejects.toMatchObject({
       status: 503,
       response: { code: 'ENTITLEMENTS_UNAVAILABLE' },
     });
@@ -89,7 +77,7 @@ describe('ConversionResolver entitlement sizing', () => {
     const { resolver } = buildResolver(proSnapshot);
     const publicId = '3f2c1a84-9d5e-4b7a-8c6f-0e1d2a3b4c5d';
 
-    await cappedSnapshot(resolver, publicId);
+    await snapshotFor(resolver, publicId);
 
     expect(
       (resolver as unknown as { entitlements: { getEntitlement: jest.Mock } })
@@ -106,7 +94,7 @@ describe('ConversionResolver entitlement sizing', () => {
     );
 
     await expect(
-      cappedSnapshot(resolver, '3f2c1a84-9d5e-4b7a-8c6f-0e1d2a3b4c5d'),
+      snapshotFor(resolver, '3f2c1a84-9d5e-4b7a-8c6f-0e1d2a3b4c5d'),
     ).rejects.toMatchObject({
       status: 401,
       response: { code: 'SESSION_STALE' },
@@ -119,7 +107,7 @@ describe('ConversionResolver entitlement sizing', () => {
       resolver as unknown as { entitlements: { getEntitlement: jest.Mock } }
     ).entitlements.getEntitlement.mockResolvedValue({});
 
-    await expect(cappedSnapshot(resolver)).rejects.toThrow(
+    await expect(snapshotFor(resolver)).rejects.toThrow(
       'Entitlement response carried no snapshot',
     );
   });
