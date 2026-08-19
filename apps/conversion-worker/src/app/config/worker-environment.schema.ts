@@ -13,8 +13,8 @@ export const workerEnvironmentSchema = Joi.object({
   NODE_ENV: nodeEnvironment,
   AWS_REGION: awsRegion,
   AWS_ACCOUNT_ID: awsAccountId,
-  AWS_ACCESS_KEY_ID: awsAccessKeyId,
-  AWS_SECRET_ACCESS_KEY: awsSecretAccessKey,
+  AWS_ACCESS_KEY_ID: awsAccessKeyId.optional(),
+  AWS_SECRET_ACCESS_KEY: awsSecretAccessKey.optional(),
   CONVERSION_S3_BUCKET: s3BucketName,
   SQS_QUEUE_SUFFIX: Joi.when('NODE_ENV', {
     is: 'production',
@@ -38,4 +38,4 @@ export const workerEnvironmentSchema = Joi.object({
     .trim()
     .min(1)
     .default('/tmp/pixaeron-worker-progress'),
-});
+}).and('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY');

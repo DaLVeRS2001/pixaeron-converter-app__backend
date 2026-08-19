@@ -11,6 +11,8 @@ import {
   type ConversionRetentionClass,
 } from '@pixaeron/conversion-contract';
 
+import { explicitAwsCredentials } from '../config/aws-credentials';
+
 const TRANSFER_DEADLINE_MS = 60_000;
 
 export class InputIntegrityError extends Error {
@@ -38,12 +40,7 @@ export class WorkerObjectStorageService {
     );
     this.client = new S3Client({
       region: configService.getOrThrow<string>('AWS_REGION'),
-      credentials: {
-        accessKeyId: configService.getOrThrow<string>('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: configService.getOrThrow<string>(
-          'AWS_SECRET_ACCESS_KEY',
-        ),
-      },
+      credentials: explicitAwsCredentials(configService),
       requestHandler: {
         connectionTimeout: 2_000,
         requestTimeout: 60_000,
