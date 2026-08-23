@@ -25,7 +25,7 @@ import {
   type ConversionBatch,
   type ConversionFile,
 } from '../../generated/prisma/client';
-import { rollUpBatch } from '../lifecycle/batch-rollup';
+import { LIVE_FILE_STATUSES, rollUpBatch } from '../lifecycle/batch-rollup';
 import { PrismaService } from '../prisma/prisma.service';
 import { isUniqueConstraintError } from '../prisma/prisma.support';
 
@@ -417,15 +417,17 @@ export class AdmissionService {
     items: Array<ConversionBatch & { files: ConversionFile[] }>;
     total: number;
   }> {
+    const live = { status: { in: LIVE_FILE_STATUSES } };
+    const listed = { subject, files: { some: live } };
     const [items, total] = await Promise.all([
       this.prisma.conversionBatch.findMany({
-        where: { subject },
-        include: { files: { orderBy: { id: 'asc' } } },
+        where: listed,
+        include: { files: { where: live, orderBy: { id: 'asc' } } },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
       }),
-      this.prisma.conversionBatch.count({ where: { subject } }),
+      this.prisma.conversionBatch.count({ where: listed }),
     ]);
 
     return { items, total };

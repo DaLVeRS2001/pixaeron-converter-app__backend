@@ -9,6 +9,13 @@ export const OPEN_BATCH_STATUSES = [
   ConversionBatchStatus.QUEUED,
   ConversionBatchStatus.PROCESSING,
 ];
+export const LIVE_FILE_STATUSES = [
+  ConversionFileStatus.UPLOADING,
+  ConversionFileStatus.READY,
+  ConversionFileStatus.QUEUED,
+  ConversionFileStatus.PROCESSING,
+  ConversionFileStatus.COMPLETED,
+];
 const TERMINAL_FILE_STATUSES = new Set<ConversionFileStatus>([
   ConversionFileStatus.COMPLETED,
   ConversionFileStatus.FAILED,

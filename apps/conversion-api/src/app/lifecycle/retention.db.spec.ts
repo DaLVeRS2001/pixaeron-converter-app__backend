@@ -27,6 +27,9 @@ describe('RetentionService on Postgres', () => {
     await prisma.conversionBatch.deleteMany({
       where: { subject: { in: subjects } },
     });
+    await prisma.dailyUsage.deleteMany({
+      where: { subject: { in: subjects } },
+    });
     subjects = [];
   });
 
@@ -177,5 +180,81 @@ describe('RetentionService on Postgres', () => {
 
     expect(second.status).toBe(first.status);
     expect(second.files[0].updatedAt).toEqual(first.files[0].updatedAt);
+  });
+
+  const WEEK_HOURS = 7 * 24;
+
+  it('purges a batch a week after everything in it is dead', async () => {
+    const batch = await seedBatch(
+      ConversionBatchStatus.EXPIRED,
+      [
+        {
+          status: ConversionFileStatus.EXPIRED,
+          expiresInHours: -WEEK_HOURS - 1,
+        },
+      ],
+      -WEEK_HOURS - 1,
+    );
+
+    await retention.purgeDeadRows();
+
+    expect(
+      await prisma.conversionBatch.findUnique({ where: { id: batch.id } }),
+    ).toBeNull();
+    expect(
+      await prisma.conversionFile.count({ where: { batchId: batch.id } }),
+    ).toBe(0);
+  });
+
+  it('keeps a dead batch inside the grace week', async () => {
+    const batch = await seedBatch(
+      ConversionBatchStatus.EXPIRED,
+      [{ status: ConversionFileStatus.EXPIRED, expiresInHours: -1 }],
+      -1,
+    );
+
+    await retention.purgeDeadRows();
+
+    expect(await reload(batch.id)).toMatchObject({ id: batch.id });
+  });
+
+  it('never purges a batch that still holds a stored result', async () => {
+    const batch = await seedBatch(
+      ConversionBatchStatus.PARTIAL,
+      [
+        { status: ConversionFileStatus.COMPLETED, expiresInHours: 24 },
+        {
+          status: ConversionFileStatus.FAILED,
+          expiresInHours: -WEEK_HOURS - 1,
+        },
+      ],
+      -WEEK_HOURS - 1,
+    );
+
+    await retention.purgeDeadRows();
+
+    expect((await reload(batch.id)).files).toHaveLength(2);
+  });
+
+  it('drops daily usage rows older than the grace week and keeps recent ones', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const day = (daysAgo: number) => {
+      const date = new Date();
+      date.setUTCHours(0, 0, 0, 0);
+      date.setUTCDate(date.getUTCDate() - daysAgo);
+      return date;
+    };
+    await prisma.dailyUsage.createMany({
+      data: [
+        { subject, usageDate: day(0), admittedFiles: 3 },
+        { subject, usageDate: day(30), admittedFiles: 9 },
+      ],
+    });
+
+    await retention.purgeDeadRows();
+
+    const remaining = await prisma.dailyUsage.findMany({ where: { subject } });
+    expect(remaining.map(({ admittedFiles }) => admittedFiles)).toEqual([3]);
   });
 });

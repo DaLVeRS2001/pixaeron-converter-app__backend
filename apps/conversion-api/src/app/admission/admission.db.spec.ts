@@ -517,4 +517,31 @@ describe('AdmissionService on Postgres', () => {
     });
     expect(file.status).toBe(ConversionFileStatus.READY);
   });
+
+  it('lists only live files and hides batches with nothing left to show', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const living = await readyBatch(subject, proSnapshot, 2);
+    const dead = await readyBatch(subject, proSnapshot, 1);
+    await prisma.conversionFile.update({
+      where: { id: living.files[0].id },
+      data: { status: ConversionFileStatus.COMPLETED },
+    });
+    await prisma.conversionFile.update({
+      where: { id: living.files[1].id },
+      data: { status: ConversionFileStatus.EXPIRED },
+    });
+    await prisma.conversionFile.updateMany({
+      where: { batchId: dead.batch.id },
+      data: { status: ConversionFileStatus.EXPIRED },
+    });
+
+    const page = await service.listBatches(subject, 10, 0);
+
+    expect(page.total).toBe(1);
+    expect(page.items.map(({ id }) => id)).toEqual([living.batch.id]);
+    expect(page.items[0].files.map(({ id }) => id)).toEqual([
+      living.files[0].id,
+    ]);
+  });
 });

@@ -3,17 +3,15 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { ConversionFileStatus } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { OPEN_BATCH_STATUSES, rollUpBatch } from './batch-rollup';
+import {
+  LIVE_FILE_STATUSES,
+  OPEN_BATCH_STATUSES,
+  rollUpBatch,
+} from './batch-rollup';
 
-const EXPIRABLE_FILE_STATUSES = [
-  ConversionFileStatus.UPLOADING,
-  ConversionFileStatus.READY,
-  ConversionFileStatus.QUEUED,
-  ConversionFileStatus.PROCESSING,
-  ConversionFileStatus.COMPLETED,
-];
 const SWEEP_FILE_LIMIT = 2000;
 const SWEEP_BATCH_LIMIT = 200;
+const PURGE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class RetentionService {
@@ -25,7 +23,7 @@ export class RetentionService {
   async expireOverdueFiles(): Promise<void> {
     const now = new Date();
     const overdueFile = {
-      status: { in: EXPIRABLE_FILE_STATUSES },
+      status: { in: LIVE_FILE_STATUSES },
       expiresAt: { lte: now },
     };
 
@@ -74,6 +72,27 @@ export class RetentionService {
     if (batchIds.size > 0) {
       this.logger.log(
         `Retention sweep expired files in ${batchIds.size} batches`,
+      );
+    }
+  }
+
+  @Cron(CronExpression.EVERY_HOUR, { waitForCompletion: true })
+  async purgeDeadRows(): Promise<void> {
+    const cutoff = new Date(Date.now() - PURGE_GRACE_MS);
+
+    const batches = await this.prisma.conversionBatch.deleteMany({
+      where: {
+        expiresAt: { lte: cutoff },
+        files: { none: { status: { in: LIVE_FILE_STATUSES } } },
+      },
+    });
+    const usage = await this.prisma.dailyUsage.deleteMany({
+      where: { usageDate: { lt: cutoff } },
+    });
+
+    if (batches.count > 0 || usage.count > 0) {
+      this.logger.log(
+        `Purged ${batches.count} dead batches and ${usage.count} stale usage rows`,
       );
     }
   }
