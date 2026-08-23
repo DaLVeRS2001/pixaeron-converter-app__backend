@@ -9,6 +9,7 @@ const service = (overrides: Record<string, string> = {}) =>
     new ConfigService({
       WORKER_MAX_INPUT_BYTES: '26214400',
       WORKER_MAX_PIXELS: '50000000',
+      WORKER_SLOTS: '1',
       ...overrides,
     }),
   );
@@ -358,12 +359,7 @@ describe('ImageCompressorService', () => {
     expect(
       await service({ WORKER_MAX_PIXELS: '1000000' }).compress(input),
     ).toMatchObject({ ok: true });
-    const limited = new ImageCompressorService(
-      new ConfigService({
-        WORKER_MAX_INPUT_BYTES: '26214400',
-        WORKER_MAX_PIXELS: '30000',
-      }),
-    );
+    const limited = service({ WORKER_MAX_PIXELS: '30000' });
     expect(await limited.compress(input)).toEqual({
       ok: false,
       failureCode: 'PIXELS_EXCEEDED',

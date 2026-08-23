@@ -37,7 +37,7 @@ start_worker() {
 wait_for_log() {
   local pattern="$1"
   for _ in {1..30}; do
-    if docker logs "$WORKER_CONTAINER" 2>&1 | grep -q "$pattern"; then
+    if docker logs "$WORKER_CONTAINER" 2>&1 | grep "$pattern" > /dev/null; then
       return
     fi
     sleep 1
@@ -96,7 +96,7 @@ if [[ "$(docker inspect --format '{{.State.ExitCode}}' "$WORKER_CONTAINER")" == 
   echo 'Worker must refuse to start with an out-of-range configuration.' >&2
   exit 1
 fi
-docker logs "$WORKER_CONTAINER" 2>&1 | grep -q 'WORKER_MAX_PIXELS' || {
+docker logs "$WORKER_CONTAINER" 2>&1 | grep 'WORKER_MAX_PIXELS' > /dev/null || {
   echo 'Startup failure must name the invalid variable.' >&2
   docker logs "$WORKER_CONTAINER" 2>&1 | tail -20 >&2
   exit 1

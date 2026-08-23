@@ -46,6 +46,8 @@ describe('QueueConsumerService', () => {
         AWS_REGION: 'eu-central-1',
         AWS_ACCOUNT_ID: '123456789012',
         SQS_QUEUE_SUFFIX: '-dev',
+        WORKER_QUEUE_SET: 'tiers',
+        WORKER_SLOTS: '1',
         WORKER_PROGRESS_FILE: progressFile,
       }),
     );
@@ -210,6 +212,74 @@ describe('QueueConsumerService', () => {
     await Promise.all(waiters);
 
     expect(order).toEqual([0, 1, 2]);
+  });
+
+  const serviceWith = (environment: Record<string, string>) =>
+    new QueueConsumerService(
+      client as never,
+      storage as never,
+      compressor as never,
+      events as never,
+      new ConfigService({
+        AWS_REGION: 'eu-central-1',
+        AWS_ACCOUNT_ID: '123456789012',
+        SQS_QUEUE_SUFFIX: '-dev',
+        WORKER_QUEUE_SET: 'tiers',
+        WORKER_SLOTS: '1',
+        WORKER_PROGRESS_FILE: progressFile,
+        ...environment,
+      }),
+    );
+
+  const queuesOf = (target: QueueConsumerService) =>
+    (target as unknown as { queues: { url: string; loops: number }[] }).queues;
+
+  it('runs several files at once when the pool has free slots', async () => {
+    const pooled = serviceWith({ WORKER_SLOTS: '3' }) as unknown as {
+      acquire: (priority: number) => Promise<void>;
+      release: () => void;
+    };
+    let started = 0;
+
+    await pooled.acquire(0).then(() => started++);
+    await pooled.acquire(0).then(() => started++);
+    await pooled.acquire(0).then(() => started++);
+    const fourth = pooled.acquire(0).then(() => started++);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(started).toBe(3);
+    pooled.release();
+    await fourth;
+    expect(started).toBe(4);
+  });
+
+  it('lets only the pro queue fan out to the pool size', () => {
+    const queues = queuesOf(serviceWith({ WORKER_SLOTS: '8' }));
+
+    expect(
+      queues.map(({ url, loops }) => [url.split('/').pop(), loops]),
+    ).toEqual([
+      ['pixaeron-conversion-pro-dev', 8],
+      ['pixaeron-conversion-light-dev', 1],
+      ['pixaeron-conversion-free-dev', 1],
+      ['pixaeron-conversion-anon-dev', 1],
+    ]);
+  });
+
+  it('caps every fan-out at the pool size on small hardware', () => {
+    const queues = queuesOf(serviceWith({ WORKER_SLOTS: '2' }));
+
+    expect(queues.map(({ loops }) => loops)).toEqual([2, 1, 1, 1]);
+  });
+
+  it('polls only the paid-large queue in paid-large mode', () => {
+    const queues = queuesOf(
+      serviceWith({ WORKER_QUEUE_SET: 'paid-large', WORKER_SLOTS: '1' }),
+    );
+
+    expect(
+      queues.map(({ url, loops }) => [url.split('/').pop(), loops]),
+    ).toEqual([['pixaeron-conversion-paid-large-dev', 1]]);
   });
 
   it('grants a starved low-priority waiter within the anti-starvation period', async () => {

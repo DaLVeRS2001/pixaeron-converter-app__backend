@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   isMember,
   outputObjectKey,
+  PAID_LARGE_QUEUE,
   queueForTier,
   queueUrl,
   RETENTION_CLASSES,
@@ -33,6 +34,7 @@ import { WorkerEventsService } from '../events/worker-events.service';
 import { WORKER_SQS_CLIENT } from './worker-sqs.client';
 
 const PRIORITY_TIERS = [3, 2, 1, 0];
+const TIER_SLOT_CAPS: Record<number, number> = { 0: 1, 1: 1, 2: 1, 3: 8 };
 const RECEIVE_WAIT_SECONDS = 20;
 const RETRY_DELAY_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -42,17 +44,20 @@ const STARVATION_GRANT_PERIOD = 8;
 
 type Waiter = { priority: number; grant: () => void };
 
+type PolledQueue = { url: string; priority: number; loops: number };
+
 @Injectable()
 export class QueueConsumerService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(QueueConsumerService.name);
-  private readonly queueUrls: string[];
+  private readonly queues: PolledQueue[];
+  private readonly slots: number;
   private readonly progressFile: string;
   private readonly shutdown = new AbortController();
   private running = false;
   private loops: Promise<void>[] = [];
-  private busy = false;
+  private active = 0;
   private waiters: Waiter[] = [];
   private grants = 0;
 
@@ -66,9 +71,22 @@ export class QueueConsumerService
     const region = configService.getOrThrow<string>('AWS_REGION');
     const accountId = configService.getOrThrow<string>('AWS_ACCOUNT_ID');
     const suffix = configService.get<string>('SQS_QUEUE_SUFFIX') ?? '';
-    this.queueUrls = PRIORITY_TIERS.map((tier) =>
-      queueUrl(region, accountId, queueForTier(tier), suffix),
-    );
+    this.slots = Number(configService.getOrThrow<string>('WORKER_SLOTS'));
+    const queueSet = configService.getOrThrow<string>('WORKER_QUEUE_SET');
+    this.queues =
+      queueSet === 'paid-large'
+        ? [
+            {
+              url: queueUrl(region, accountId, PAID_LARGE_QUEUE, suffix),
+              priority: 0,
+              loops: this.slots,
+            },
+          ]
+        : PRIORITY_TIERS.map((tier, priority) => ({
+            url: queueUrl(region, accountId, queueForTier(tier), suffix),
+            priority,
+            loops: Math.min(TIER_SLOT_CAPS[tier], this.slots),
+          }));
     this.progressFile = configService.getOrThrow<string>(
       'WORKER_PROGRESS_FILE',
     );
@@ -76,12 +94,14 @@ export class QueueConsumerService
 
   onApplicationBootstrap(): void {
     this.running = true;
-    this.loops = this.queueUrls.map((url, priority) =>
-      this.pollLoop(priority, url).finally(() => {
-        if (!this.running) return;
-        this.logger.error(`Consumer loop for ${url} died; stopping`);
-        process.kill(process.pid, 'SIGTERM');
-      }),
+    this.loops = this.queues.flatMap(({ url, priority, loops }) =>
+      Array.from({ length: loops }, () =>
+        this.pollLoop(priority, url).finally(() => {
+          if (!this.running) return;
+          this.logger.error(`Consumer loop for ${url} died; stopping`);
+          process.kill(process.pid, 'SIGTERM');
+        }),
+      ),
     );
   }
 
@@ -167,8 +187,8 @@ export class QueueConsumerService
   }
 
   private acquire(priority: number): Promise<void> {
-    if (!this.busy) {
-      this.busy = true;
+    if (this.active < this.slots) {
+      this.active++;
       return Promise.resolve();
     }
 
@@ -186,7 +206,7 @@ export class QueueConsumerService
       this.grants++;
       next.grant();
     } else {
-      this.busy = false;
+      this.active--;
     }
   }
 
