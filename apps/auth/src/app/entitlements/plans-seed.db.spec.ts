@@ -67,7 +67,7 @@ describe('plans seed on Postgres', () => {
         maxBatchFiles: 10,
         maxFileBytes: 50 * 1024 * 1024,
         dailyFiles: null,
-        maxConcurrentFiles: 3,
+        maxConcurrentFiles: 1,
         queueTier: 2,
         minStartDelayMs: 0,
         outputRetentionHours: 96,
