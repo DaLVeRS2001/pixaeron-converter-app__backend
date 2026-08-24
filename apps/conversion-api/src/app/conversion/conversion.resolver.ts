@@ -22,6 +22,8 @@ import type { HttpContext } from '@pixaeron/nestjs';
 
 import {
   ConversionFileStatus,
+  ConversionMode,
+  ConversionStrength,
   type ConversionBatch as ConversionBatchRow,
   type ConversionFile as ConversionFileRow,
 } from '../../generated/prisma/client';
@@ -95,6 +97,8 @@ export class ConversionResolver {
           anonymous: identity.userPublicId === null,
           idempotencyKey: input.idempotencyKey,
           fileCount: input.fileCount,
+          mode: input.mode ?? ConversionMode.LOSSY,
+          strength: input.strength ?? ConversionStrength.LOW,
           batchToken: input.batchToken,
         },
         snapshot,

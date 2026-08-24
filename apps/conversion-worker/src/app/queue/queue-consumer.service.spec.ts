@@ -175,6 +175,31 @@ describe('QueueConsumerService', () => {
     },
   );
 
+  it('compresses at the mode and strength the request names, falling back to lossy low', async () => {
+    const body = JSON.parse(message().Body as string);
+
+    await service.handle(
+      QUEUE_URL,
+      message({
+        Body: JSON.stringify({ ...body, mode: 'LOSSLESS', strength: 'HIGH' }),
+      }),
+    );
+    await service.handle(QUEUE_URL, message());
+
+    expect(compressor.compress).toHaveBeenNthCalledWith(
+      1,
+      expect.any(Buffer),
+      'LOSSLESS',
+      'HIGH',
+    );
+    expect(compressor.compress).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Buffer),
+      'LOSSY',
+      'LOW',
+    );
+  });
+
   it('processes a request enqueued before retention classes existed', async () => {
     const body = JSON.parse(message().Body as string);
     delete body.outputRetention;

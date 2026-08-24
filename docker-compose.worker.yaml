@@ -20,7 +20,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1152m
+          memory: 1536m
     healthcheck:
       test:
         - CMD

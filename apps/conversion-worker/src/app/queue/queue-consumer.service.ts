@@ -15,9 +15,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   isMember,
+  MODES,
   outputObjectKey,
   PAID_LARGE_QUEUE,
   queueForTier,
+  STRENGTHS,
   queueUrl,
   RETENTION_CLASSES,
   type ConversionRequestMessage,
@@ -249,7 +251,11 @@ export class QueueConsumerService
       throw error;
     }
 
-    const result = await this.compressor.compress(input);
+    const result = await this.compressor.compress(
+      input,
+      request.mode,
+      request.strength,
+    );
     if (!result.ok) {
       await this.events.publish({
         type: 'RESULT',
@@ -311,8 +317,15 @@ export const parseConversionRequest = (
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
 
-  const { fileId, batchId, inputObjectKey, inputEtag, outputRetention } =
-    parsed as Record<string, unknown>;
+  const {
+    fileId,
+    batchId,
+    inputObjectKey,
+    inputEtag,
+    outputRetention,
+    mode,
+    strength,
+  } = parsed as Record<string, unknown>;
   const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.length > 0;
   if (
@@ -332,5 +345,7 @@ export const parseConversionRequest = (
     outputRetention: isMember(RETENTION_CLASSES, outputRetention)
       ? outputRetention
       : 'standard',
+    mode: isMember(MODES, mode) ? mode : 'LOSSY',
+    strength: isMember(STRENGTHS, strength) ? strength : 'LOW',
   };
 };

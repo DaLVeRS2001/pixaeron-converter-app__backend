@@ -162,8 +162,21 @@ type Mutation {
 
 input CreateConversionBatchInput {
   fileCount: Int!
+  mode: ConversionMode
+  strength: ConversionStrength
   idempotencyKey: String!
   batchToken: String
+}
+
+enum ConversionMode {
+  LOSSLESS
+  LOSSY
+}
+
+enum ConversionStrength {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 input CompleteConversionUploadsInput {

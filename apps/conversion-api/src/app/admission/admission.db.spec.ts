@@ -8,6 +8,8 @@ import { randomUUID } from 'node:crypto';
 import {
   ConversionBatchStatus,
   ConversionFileStatus,
+  ConversionMode,
+  ConversionStrength,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdmissionService } from './admission.service';
@@ -99,6 +101,8 @@ describe('AdmissionService on Postgres', () => {
           EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
         idempotencyKey: randomUUID(),
         fileCount,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
       },
       snapshot,
     );
@@ -304,7 +308,14 @@ describe('AdmissionService on Postgres', () => {
   it('owns a signed-in batch by subject alone, with no minted token', async () => {
     const subject = `user:${randomUUID()}`;
     const created = await service.createBatch(
-      { subject, anonymous: false, idempotencyKey: randomUUID(), fileCount: 1 },
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey: randomUUID(),
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
+      },
       anonymousSnapshot,
     );
     batchIds.push(created.batch.id);
@@ -325,7 +336,14 @@ describe('AdmissionService on Postgres', () => {
   it('admits files that become ready after the first admission', async () => {
     const subject = anonSubject();
     const created = await service.createBatch(
-      { subject, anonymous: true, idempotencyKey: randomUUID(), fileCount: 2 },
+      {
+        subject,
+        anonymous: true,
+        idempotencyKey: randomUUID(),
+        fileCount: 2,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
+      },
       anonymousSnapshot,
     );
     batchIds.push(created.batch.id);
@@ -392,7 +410,14 @@ describe('AdmissionService on Postgres', () => {
     const subject = anonSubject();
     const idempotencyKey = 'shared-nat-key';
     const first = await service.createBatch(
-      { subject, anonymous: true, idempotencyKey, fileCount: 1 },
+      {
+        subject,
+        anonymous: true,
+        idempotencyKey,
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
+      },
       anonymousSnapshot,
     );
 
@@ -402,6 +427,8 @@ describe('AdmissionService on Postgres', () => {
         anonymous: true,
         idempotencyKey,
         fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
         batchToken: first.batchToken,
       },
       anonymousSnapshot,
@@ -417,6 +444,8 @@ describe('AdmissionService on Postgres', () => {
           anonymous: true,
           idempotencyKey,
           fileCount: 1,
+          mode: ConversionMode.LOSSY,
+          strength: ConversionStrength.LOW,
           batchToken: 'someone-elses-guess',
         },
         anonymousSnapshot,
@@ -430,9 +459,120 @@ describe('AdmissionService on Postgres', () => {
           anonymous: true,
           idempotencyKey,
           fileCount: 3,
+          mode: ConversionMode.LOSSY,
+          strength: ConversionStrength.LOW,
           batchToken: first.batchToken,
         },
         anonymousSnapshot,
+      ),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+
+    await expect(
+      service.createBatch(
+        {
+          subject,
+          anonymous: true,
+          idempotencyKey,
+          fileCount: 1,
+          mode: ConversionMode.LOSSLESS,
+          strength: ConversionStrength.LOW,
+          batchToken: first.batchToken,
+        },
+        anonymousSnapshot,
+      ),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it('tells the worker which mode the batch was created in', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const created = await service.createBatch(
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey: randomUUID(),
+        fileCount: 1,
+        mode: ConversionMode.LOSSLESS,
+        strength: ConversionStrength.LOW,
+      },
+      proSnapshot,
+    );
+    batchIds.push(created.batch.id);
+    await prisma.conversionFile.updateMany({
+      where: { batchId: created.batch.id },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes: 1024,
+        inputEtag: 'etag',
+      },
+    });
+
+    await service.admitReadyFiles(created.batch.id, { subject }, proSnapshot);
+
+    const [event] = await outboxEventsForBatches();
+    expect(created.batch.mode).toBe(ConversionMode.LOSSLESS);
+    expect(event.payload).toMatchObject({ mode: 'LOSSLESS', strength: 'LOW' });
+  });
+
+  it('tells the worker how hard the batch asked to be squeezed', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const created = await service.createBatch(
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey: randomUUID(),
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.HIGH,
+      },
+      proSnapshot,
+    );
+    batchIds.push(created.batch.id);
+    await prisma.conversionFile.updateMany({
+      where: { batchId: created.batch.id },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes: 1024,
+        inputEtag: 'etag',
+      },
+    });
+
+    await service.admitReadyFiles(created.batch.id, { subject }, proSnapshot);
+
+    const [event] = await outboxEventsForBatches();
+    expect(created.batch.strength).toBe(ConversionStrength.HIGH);
+    expect(event.payload).toMatchObject({ strength: 'HIGH' });
+  });
+
+  it('refuses to replay an idempotency key at a different strength', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const idempotencyKey = randomUUID();
+    const first = await service.createBatch(
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey,
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
+      },
+      proSnapshot,
+    );
+    batchIds.push(first.batch.id);
+
+    await expect(
+      service.createBatch(
+        {
+          subject,
+          anonymous: false,
+          idempotencyKey,
+          fileCount: 1,
+          mode: ConversionMode.LOSSY,
+          strength: ConversionStrength.HIGH,
+        },
+        proSnapshot,
       ),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
   });
@@ -516,5 +656,32 @@ describe('AdmissionService on Postgres', () => {
       where: { batchId: batch.id },
     });
     expect(file.status).toBe(ConversionFileStatus.READY);
+  });
+
+  it('lists only live files and hides batches with nothing left to show', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const living = await readyBatch(subject, proSnapshot, 2);
+    const dead = await readyBatch(subject, proSnapshot, 1);
+    await prisma.conversionFile.update({
+      where: { id: living.files[0].id },
+      data: { status: ConversionFileStatus.COMPLETED },
+    });
+    await prisma.conversionFile.update({
+      where: { id: living.files[1].id },
+      data: { status: ConversionFileStatus.EXPIRED },
+    });
+    await prisma.conversionFile.updateMany({
+      where: { batchId: dead.batch.id },
+      data: { status: ConversionFileStatus.EXPIRED },
+    });
+
+    const page = await service.listBatches(subject, 10, 0);
+
+    expect(page.total).toBe(1);
+    expect(page.items.map(({ id }) => id)).toEqual([living.batch.id]);
+    expect(page.items[0].files.map(({ id }) => id)).toEqual([
+      living.files[0].id,
+    ]);
   });
 });

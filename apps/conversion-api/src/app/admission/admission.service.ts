@@ -20,12 +20,14 @@ import {
 import {
   ConversionBatchStatus,
   ConversionFileStatus,
+  ConversionMode,
   ConversionPlanCode,
+  ConversionStrength,
   Prisma,
   type ConversionBatch,
   type ConversionFile,
 } from '../../generated/prisma/client';
-import { rollUpBatch } from '../lifecycle/batch-rollup';
+import { LIVE_FILE_STATUSES, rollUpBatch } from '../lifecycle/batch-rollup';
 import { PrismaService } from '../prisma/prisma.service';
 import { isUniqueConstraintError } from '../prisma/prisma.support';
 
@@ -81,6 +83,8 @@ export type CreateBatchInput = {
   anonymous: boolean;
   idempotencyKey: string;
   fileCount: number;
+  mode: ConversionMode;
+  strength: ConversionStrength;
   batchToken?: string | null;
 };
 
@@ -146,6 +150,8 @@ export class AdmissionService {
           idempotencyKey: input.idempotencyKey,
           planCode,
           planRevision: snapshot.revision,
+          mode: input.mode,
+          strength: input.strength,
           fileCount: input.fileCount,
           expiresAt,
           files: {
@@ -186,7 +192,11 @@ export class AdmissionService {
         { subject: input.subject, batchToken: input.batchToken },
         'BATCH_TOKEN_MISMATCH',
       );
-      if (existing.fileCount !== input.fileCount) {
+      if (
+        existing.fileCount !== input.fileCount ||
+        existing.mode !== input.mode ||
+        existing.strength !== input.strength
+      ) {
         throw new AdmissionError('IDEMPOTENCY_CONFLICT');
       }
 
@@ -394,6 +404,8 @@ export class AdmissionService {
             inputObjectKey: file.input_object_key,
             inputEtag: file.input_etag as string,
             outputRetention,
+            mode: batch.mode,
+            strength: batch.strength,
           } satisfies ConversionRequestMessage,
         })),
       });
@@ -417,15 +429,17 @@ export class AdmissionService {
     items: Array<ConversionBatch & { files: ConversionFile[] }>;
     total: number;
   }> {
+    const live = { status: { in: LIVE_FILE_STATUSES } };
+    const listed = { subject, files: { some: live } };
     const [items, total] = await Promise.all([
       this.prisma.conversionBatch.findMany({
-        where: { subject },
-        include: { files: { orderBy: { id: 'asc' } } },
+        where: listed,
+        include: { files: { where: live, orderBy: { id: 'asc' } } },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
       }),
-      this.prisma.conversionBatch.count({ where: { subject } }),
+      this.prisma.conversionBatch.count({ where: listed }),
     ]);
 
     return { items, total };

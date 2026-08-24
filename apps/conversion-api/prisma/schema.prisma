@@ -43,6 +43,17 @@ enum ConversionResultKind {
   SANITIZED_LARGER
 }
 
+enum ConversionMode {
+  LOSSLESS
+  LOSSY
+}
+
+enum ConversionStrength {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum OutboxEventStatus {
   PENDING
   DELIVERED
@@ -55,6 +66,8 @@ model ConversionBatch {
   idempotencyKey String                @map("idempotency_key")
   planCode       ConversionPlanCode    @map("plan_code")
   planRevision   Int                   @map("plan_revision")
+  mode           ConversionMode        @default(LOSSY)
+  strength       ConversionStrength    @default(LOW)
   status         ConversionBatchStatus @default(UPLOADING)
   fileCount      Int                   @map("file_count")
   createdAt      DateTime              @default(now()) @map("created_at")
