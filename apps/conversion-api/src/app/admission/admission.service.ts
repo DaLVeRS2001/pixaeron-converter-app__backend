@@ -22,6 +22,7 @@ import {
   ConversionFileStatus,
   ConversionMode,
   ConversionPlanCode,
+  ConversionStrength,
   Prisma,
   type ConversionBatch,
   type ConversionFile,
@@ -83,6 +84,7 @@ export type CreateBatchInput = {
   idempotencyKey: string;
   fileCount: number;
   mode: ConversionMode;
+  strength: ConversionStrength;
   batchToken?: string | null;
 };
 
@@ -149,6 +151,7 @@ export class AdmissionService {
           planCode,
           planRevision: snapshot.revision,
           mode: input.mode,
+          strength: input.strength,
           fileCount: input.fileCount,
           expiresAt,
           files: {
@@ -191,7 +194,8 @@ export class AdmissionService {
       );
       if (
         existing.fileCount !== input.fileCount ||
-        existing.mode !== input.mode
+        existing.mode !== input.mode ||
+        existing.strength !== input.strength
       ) {
         throw new AdmissionError('IDEMPOTENCY_CONFLICT');
       }
@@ -401,6 +405,7 @@ export class AdmissionService {
             inputEtag: file.input_etag as string,
             outputRetention,
             mode: batch.mode,
+            strength: batch.strength,
           } satisfies ConversionRequestMessage,
         })),
       });

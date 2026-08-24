@@ -9,6 +9,7 @@ import {
   ConversionBatchStatus,
   ConversionFileStatus,
   ConversionMode,
+  ConversionStrength,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdmissionService } from './admission.service';
@@ -101,6 +102,7 @@ describe('AdmissionService on Postgres', () => {
         idempotencyKey: randomUUID(),
         fileCount,
         mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
       },
       snapshot,
     );
@@ -312,6 +314,7 @@ describe('AdmissionService on Postgres', () => {
         idempotencyKey: randomUUID(),
         fileCount: 1,
         mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
       },
       anonymousSnapshot,
     );
@@ -339,6 +342,7 @@ describe('AdmissionService on Postgres', () => {
         idempotencyKey: randomUUID(),
         fileCount: 2,
         mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
       },
       anonymousSnapshot,
     );
@@ -412,6 +416,7 @@ describe('AdmissionService on Postgres', () => {
         idempotencyKey,
         fileCount: 1,
         mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
       },
       anonymousSnapshot,
     );
@@ -423,6 +428,7 @@ describe('AdmissionService on Postgres', () => {
         idempotencyKey,
         fileCount: 1,
         mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
         batchToken: first.batchToken,
       },
       anonymousSnapshot,
@@ -439,6 +445,7 @@ describe('AdmissionService on Postgres', () => {
           idempotencyKey,
           fileCount: 1,
           mode: ConversionMode.LOSSY,
+          strength: ConversionStrength.LOW,
           batchToken: 'someone-elses-guess',
         },
         anonymousSnapshot,
@@ -453,6 +460,7 @@ describe('AdmissionService on Postgres', () => {
           idempotencyKey,
           fileCount: 3,
           mode: ConversionMode.LOSSY,
+          strength: ConversionStrength.LOW,
           batchToken: first.batchToken,
         },
         anonymousSnapshot,
@@ -467,6 +475,7 @@ describe('AdmissionService on Postgres', () => {
           idempotencyKey,
           fileCount: 1,
           mode: ConversionMode.LOSSLESS,
+          strength: ConversionStrength.LOW,
           batchToken: first.batchToken,
         },
         anonymousSnapshot,
@@ -484,6 +493,7 @@ describe('AdmissionService on Postgres', () => {
         idempotencyKey: randomUUID(),
         fileCount: 1,
         mode: ConversionMode.LOSSLESS,
+        strength: ConversionStrength.LOW,
       },
       proSnapshot,
     );
@@ -501,7 +511,70 @@ describe('AdmissionService on Postgres', () => {
 
     const [event] = await outboxEventsForBatches();
     expect(created.batch.mode).toBe(ConversionMode.LOSSLESS);
-    expect(event.payload).toMatchObject({ mode: 'LOSSLESS' });
+    expect(event.payload).toMatchObject({ mode: 'LOSSLESS', strength: 'LOW' });
+  });
+
+  it('tells the worker how hard the batch asked to be squeezed', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const created = await service.createBatch(
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey: randomUUID(),
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.HIGH,
+      },
+      proSnapshot,
+    );
+    batchIds.push(created.batch.id);
+    await prisma.conversionFile.updateMany({
+      where: { batchId: created.batch.id },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes: 1024,
+        inputEtag: 'etag',
+      },
+    });
+
+    await service.admitReadyFiles(created.batch.id, { subject }, proSnapshot);
+
+    const [event] = await outboxEventsForBatches();
+    expect(created.batch.strength).toBe(ConversionStrength.HIGH);
+    expect(event.payload).toMatchObject({ strength: 'HIGH' });
+  });
+
+  it('refuses to replay an idempotency key at a different strength', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const idempotencyKey = randomUUID();
+    const first = await service.createBatch(
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey,
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+        strength: ConversionStrength.LOW,
+      },
+      proSnapshot,
+    );
+    batchIds.push(first.batch.id);
+
+    await expect(
+      service.createBatch(
+        {
+          subject,
+          anonymous: false,
+          idempotencyKey,
+          fileCount: 1,
+          mode: ConversionMode.LOSSY,
+          strength: ConversionStrength.HIGH,
+        },
+        proSnapshot,
+      ),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
   });
 
   it('skips daily usage for unlimited plans and routes large paid files separately', async () => {

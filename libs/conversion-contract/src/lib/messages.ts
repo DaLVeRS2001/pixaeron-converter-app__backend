@@ -35,6 +35,10 @@ export const MODES = ['LOSSLESS', 'LOSSY'] as const;
 
 export type ConversionModeName = (typeof MODES)[number];
 
+export const STRENGTHS = ['LOW', 'MEDIUM', 'HIGH'] as const;
+
+export type ConversionStrengthName = (typeof STRENGTHS)[number];
+
 export type ConversionRequestMessage = {
   fileId: string;
   batchId: string;
@@ -42,6 +46,7 @@ export type ConversionRequestMessage = {
   inputEtag: string;
   outputRetention: ConversionRetentionClass;
   mode: ConversionModeName;
+  strength: ConversionStrengthName;
 };
 
 export type WorkerStartedEvent = {

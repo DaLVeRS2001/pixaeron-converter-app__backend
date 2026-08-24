@@ -9,7 +9,10 @@ import {
   Min,
 } from 'class-validator';
 
-import { ConversionMode } from '../../../generated/prisma/client';
+import {
+  ConversionMode,
+  ConversionStrength,
+} from '../../../generated/prisma/client';
 
 @InputType()
 export class CreateConversionBatchInput {
@@ -23,6 +26,11 @@ export class CreateConversionBatchInput {
   @IsOptional()
   @IsEnum(ConversionMode)
   mode?: ConversionMode;
+
+  @Field(() => ConversionStrength, { nullable: true })
+  @IsOptional()
+  @IsEnum(ConversionStrength)
+  strength?: ConversionStrength;
 
   @Field()
   @IsString()

@@ -6,6 +6,7 @@ import {
   type ConversionFailureCode,
   type ConversionImageFormat,
   type ConversionModeName,
+  type ConversionStrengthName,
   type ConversionResultKindName,
 } from '@pixaeron/conversion-contract';
 import { createHash } from 'node:crypto';
@@ -50,6 +51,14 @@ const JFIF_THUMB_AT = 12;
 const EXIF_ORIENTATION_TAG = 0x0112;
 const PALETTE_LIMIT = 256;
 const LOSSY_MIN_SAVING = 0.1;
+const LOSSY_QUALITY: Record<
+  ConversionStrengthName,
+  Record<ConversionImageFormat, number>
+> = {
+  LOW: { jpeg: 75, png: 60, webp: 75, avif: 50 },
+  MEDIUM: { jpeg: 60, png: 35, webp: 60, avif: 38 },
+  HIGH: { jpeg: 45, png: 10, webp: 35, avif: 30 },
+};
 const PNG_CLEAN_CHUNKS = new Set([
   'IHDR',
   'PLTE',
@@ -98,6 +107,7 @@ export class ImageCompressorService {
   async compress(
     input: Buffer,
     mode: ConversionModeName,
+    strength: ConversionStrengthName,
   ): Promise<CompressionResult> {
     if (input.length > this.maxInputBytes) {
       return { ok: false, failureCode: 'INPUT_TOO_LARGE' };
@@ -133,7 +143,8 @@ export class ImageCompressorService {
         .keepIccProfile();
 
     const encoders: Record<ConversionModeName, () => Promise<Encoded>> = {
-      LOSSY: () => this.encodeLossy(format, metadata, input, pipeline),
+      LOSSY: () =>
+        this.encodeLossy(format, metadata, input, pipeline, strength),
       LOSSLESS: () => this.encodeLossless(format, metadata, input, pipeline),
     };
 
@@ -173,14 +184,16 @@ export class ImageCompressorService {
     metadata: Metadata,
     input: Buffer,
     pipeline: () => Sharp,
+    strength: ConversionStrengthName,
   ): Promise<Encoded> {
+    const quality = LOSSY_QUALITY[strength][format];
     const buysEnough = (candidate: Encoded) =>
       candidate.data.length <= input.length * (1 - LOSSY_MIN_SAVING);
 
     switch (format) {
       case 'jpeg': {
         const lossy = await encoded(
-          pipeline().jpeg({ quality: 75, mozjpeg: true }),
+          pipeline().jpeg({ quality, mozjpeg: true }),
         );
         return buysEnough(lossy)
           ? lossy
@@ -198,7 +211,7 @@ export class ImageCompressorService {
           await encoded(
             pipeline().png({
               palette: true,
-              quality: 60,
+              quality,
               effort: 10,
               compressionLevel: 9,
               adaptiveFiltering: false,
@@ -214,8 +227,8 @@ export class ImageCompressorService {
       case 'avif': {
         const lossy = await encoded(
           format === 'webp'
-            ? pipeline().webp({ quality: 75, alphaQuality: 90 })
-            : pipeline().avif({ quality: 50, effort: 4 }),
+            ? pipeline().webp({ quality, alphaQuality: 90 })
+            : pipeline().avif({ quality, effort: 4 }),
         );
         const lossless = await this.encodeLossless(
           format,

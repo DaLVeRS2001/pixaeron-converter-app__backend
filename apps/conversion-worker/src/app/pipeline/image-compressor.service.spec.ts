@@ -43,6 +43,40 @@ const artworkImage = (width: number, height: number) => {
   return sharp(pixels, { raw: { width, height, channels: 3 } });
 };
 
+const photoImage = (width: number, height: number) => {
+  const pixels = Buffer.alloc(width * height * 3);
+  let seed = 11;
+  const grain = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return (seed / 2147483648 - 0.5) * 28;
+  };
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 3;
+      const sky = y < height * 0.45;
+      const noise = grain();
+      const base = sky
+        ? [
+            120 + (90 * y) / height,
+            150 + (70 * y) / height,
+            210 - (30 * y) / height,
+          ]
+        : [
+            90 + 60 * Math.sin(x / 40),
+            110 + 40 * Math.cos(y / 25),
+            70 + 30 * Math.sin((x + y) / 60),
+          ];
+      for (let channel = 0; channel < 3; channel++) {
+        pixels[offset + channel] = Math.max(
+          0,
+          Math.min(255, base[channel] + noise),
+        );
+      }
+    }
+  }
+  return sharp(pixels, { raw: { width, height, channels: 3 } });
+};
+
 const gradientImage = (width: number, height: number) => {
   const pixels = Buffer.alloc(width * height * 3);
   for (let y = 0; y < height; y++) {
@@ -95,7 +129,7 @@ describe('ImageCompressorService', () => {
         [format](GENEROUS_ENCODINGS[format])
         .toBuffer();
 
-      const result = await service().compress(input, 'LOSSY');
+      const result = await service().compress(input, 'LOSSY', 'LOW');
 
       expect(result).toMatchObject({
         ok: true,
@@ -118,7 +152,7 @@ describe('ImageCompressorService', () => {
       .png({ compressionLevel: 1 })
       .toBuffer();
 
-    const result = await service().compress(input, 'LOSSY');
+    const result = await service().compress(input, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'SAVED', format: 'png' });
     if (result.ok) {
@@ -134,7 +168,7 @@ describe('ImageCompressorService', () => {
       .png({ compressionLevel: 1 })
       .toBuffer();
 
-    const result = await service().compress(input, 'LOSSY');
+    const result = await service().compress(input, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'SAVED', format: 'png' });
     if (result.ok) {
@@ -155,7 +189,7 @@ describe('ImageCompressorService', () => {
       .png({ compressionLevel: 9 })
       .toBuffer();
 
-    const result = await service().compress(input, 'LOSSY');
+    const result = await service().compress(input, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
     if (result.ok) expect(result.bytes.equals(input)).toBe(true);
@@ -168,7 +202,7 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     expect((await sharp(input).metadata()).exif).toBeDefined();
 
-    const result = await service().compress(input, 'LOSSY');
+    const result = await service().compress(input, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'SAVED' });
     if (result.ok) {
@@ -184,7 +218,7 @@ describe('ImageCompressorService', () => {
       .withMetadata({ orientation: 6 })
       .toBuffer();
 
-    const result = await service().compress(input, 'LOSSY');
+    const result = await service().compress(input, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true, width: 100, height: 200 });
     if (result.ok) {
@@ -201,7 +235,7 @@ describe('ImageCompressorService', () => {
       .withMetadata({ orientation: 6 })
       .toBuffer();
 
-    const result = await service().compress(input, 'LOSSLESS');
+    const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({
       ok: true,
@@ -216,7 +250,9 @@ describe('ImageCompressorService', () => {
         false,
       );
       expect(await scanBytes(result.bytes)).toEqual(await scanBytes(input));
-      expect(await service().compress(result.bytes, 'LOSSLESS')).toMatchObject({
+      expect(
+        await service().compress(result.bytes, 'LOSSLESS', 'LOW'),
+      ).toMatchObject({
         kind: 'NO_SAVINGS',
       });
     }
@@ -230,7 +266,7 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     const before = await pixels(input);
 
-    const result = await service().compress(input, 'LOSSLESS');
+    const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -250,7 +286,7 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     expect((await sharp(input).metadata()).isPalette).toBe(false);
 
-    const result = await service().compress(input, 'LOSSLESS');
+    const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'SAVED' });
     if (result.ok) {
@@ -264,7 +300,7 @@ describe('ImageCompressorService', () => {
       .png({ compressionLevel: 1 })
       .toBuffer();
 
-    const result = await service().compress(input, 'LOSSLESS');
+    const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'SAVED' });
     if (result.ok) {
@@ -280,7 +316,7 @@ describe('ImageCompressorService', () => {
         [format]({ lossless: true })
         .toBuffer();
 
-      const result = await service().compress(input, 'LOSSLESS');
+      const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
       expect(result).toMatchObject({ ok: true });
       if (result.ok)
@@ -294,8 +330,8 @@ describe('ImageCompressorService', () => {
       .webp({ quality: 100, effort: 0 })
       .toBuffer();
 
-    const lossy = await service().compress(input, 'LOSSY');
-    const lossless = await service().compress(input, 'LOSSLESS');
+    const lossy = await service().compress(input, 'LOSSY', 'LOW');
+    const lossless = await service().compress(input, 'LOSSLESS', 'LOW');
 
     expect(lossy).toMatchObject({ ok: true });
     expect(lossless).toMatchObject({ ok: true });
@@ -314,10 +350,10 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     expect((await sharp(withExif).metadata()).exif).toBeDefined();
 
-    const trusted = await service().compress(clean, 'LOSSY');
+    const trusted = await service().compress(clean, 'LOSSY', 'LOW');
     expect(trusted).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
 
-    const result = await service().compress(withExif, 'LOSSY');
+    const result = await service().compress(withExif, 'LOSSY', 'LOW');
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
       expect(result.kind).not.toBe('NO_SAVINGS');
@@ -334,7 +370,7 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     expect((await sharp(withExif).metadata()).exif).toBeDefined();
 
-    const result = await service().compress(withExif, 'LOSSLESS');
+    const result = await service().compress(withExif, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
     if (result.ok) expect(result.bytes.equals(withExif)).toBe(true);
@@ -350,7 +386,7 @@ describe('ImageCompressorService', () => {
     const withUnknown = Buffer.concat([clean, unknown]);
     expect((await sharp(withUnknown).metadata()).format).toBe('heif');
 
-    const result = await service().compress(withUnknown, 'LOSSY');
+    const result = await service().compress(withUnknown, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) expect(result.kind).not.toBe('NO_SAVINGS');
@@ -366,7 +402,7 @@ describe('ImageCompressorService', () => {
     const padded = Buffer.concat([clean, padding]);
     expect((await sharp(padded).metadata()).format).toBe('heif');
 
-    const result = await service().compress(padded, 'LOSSY');
+    const result = await service().compress(padded, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
     if (result.ok) expect(result.bytes.equals(padded)).toBe(true);
@@ -381,7 +417,7 @@ describe('ImageCompressorService', () => {
         .toBuffer();
       expect((await sharp(input).metadata()).exif).toBeDefined();
 
-      const result = await service().compress(input, 'LOSSLESS');
+      const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
       expect(result).toMatchObject({ ok: true });
       if (result.ok)
@@ -398,7 +434,7 @@ describe('ImageCompressorService', () => {
         .toBuffer();
       expect((await sharp(input).metadata()).exif).toBeDefined();
 
-      const result = await service().compress(input, 'LOSSY');
+      const result = await service().compress(input, 'LOSSY', 'LOW');
 
       expect(result).toMatchObject({ ok: true });
       if (result.ok) {
@@ -418,7 +454,7 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     expect((await sharp(input).metadata()).exif).toBeDefined();
 
-    const result = await service().compress(input, 'LOSSLESS');
+    const result = await service().compress(input, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({ ok: true, kind: 'SAVED' });
     if (result.ok) {
@@ -434,21 +470,80 @@ describe('ImageCompressorService', () => {
       const source =
         format === 'jpeg' ? noisyImage(300, 300) : artworkImage(400, 400);
       const input = await source[format](GENEROUS_ENCODINGS[format]).toBuffer();
-      const first = await service().compress(input, 'LOSSY');
+      const first = await service().compress(input, 'LOSSY', 'LOW');
       expect(first).toMatchObject({ ok: true, kind: 'SAVED' });
       if (!first.ok) return;
 
-      const second = await service().compress(first.bytes, 'LOSSY');
+      const second = await service().compress(first.bytes, 'LOSSY', 'LOW');
 
       expect(second).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
       if (second.ok) expect(second.bytes.equals(first.bytes)).toBe(true);
     },
   );
 
+  it.each(['jpeg', 'png', 'webp', 'avif'] as const)(
+    'squeezes a %s harder at every step of the strength dial',
+    async (format) => {
+      const input = await photoImage(600, 400)
+        [format](
+          format === 'png'
+            ? { compressionLevel: 9 }
+            : { quality: 92, effort: 4 },
+        )
+        .toBuffer();
+
+      const sizes: number[] = [];
+      for (const strength of ['LOW', 'MEDIUM', 'HIGH'] as const) {
+        const result = await service().compress(input, 'LOSSY', strength);
+        expect(result).toMatchObject({ ok: true });
+        if (result.ok) sizes.push(result.bytes.length);
+      }
+
+      expect(sizes[1]).toBeLessThan(sizes[0]);
+      expect(sizes[2]).toBeLessThan(sizes[1]);
+      expect(sizes[2]).toBeLessThan(input.length);
+    },
+  );
+
+  it.each(['LOW', 'MEDIUM', 'HIGH'] as const)(
+    'stops shrinking a png after the first pass at %s strength',
+    async (strength) => {
+      let current: Buffer = await photoImage(500, 400)
+        .png({ compressionLevel: 9 })
+        .toBuffer();
+      const sizes: number[] = [];
+
+      for (let pass = 0; pass < 3; pass++) {
+        const result = await service().compress(current, 'LOSSY', strength);
+        expect(result).toMatchObject({ ok: true });
+        if (result.ok) {
+          current = Buffer.from(result.bytes);
+          sizes.push(current.length);
+        }
+      }
+
+      expect(sizes[1]).toBe(sizes[0]);
+      expect(sizes[2]).toBe(sizes[0]);
+    },
+  );
+
+  it('ignores the strength dial in lossless mode', async () => {
+    const input = await photoImage(400, 300)
+      .png({ compressionLevel: 1 })
+      .toBuffer();
+
+    const low = await service().compress(input, 'LOSSLESS', 'LOW');
+    const high = await service().compress(input, 'LOSSLESS', 'HIGH');
+
+    expect(low).toMatchObject({ ok: true });
+    expect(high).toMatchObject({ ok: true });
+    if (low.ok && high.ok) expect(low.bytes.equals(high.bytes)).toBe(true);
+  });
+
   it('rejects unsupported formats', async () => {
     const input = await noisyImage(16, 16).gif().toBuffer();
 
-    expect(await service().compress(input, 'LOSSY')).toEqual({
+    expect(await service().compress(input, 'LOSSY', 'LOW')).toEqual({
       ok: false,
       failureCode: 'UNSUPPORTED_FORMAT',
     });
@@ -464,7 +559,7 @@ describe('ImageCompressorService', () => {
       .toBuffer();
     expect((await sharp(animated).metadata()).pages).toBeGreaterThan(1);
 
-    expect(await service().compress(animated, 'LOSSY')).toEqual({
+    expect(await service().compress(animated, 'LOSSY', 'LOW')).toEqual({
       ok: false,
       failureCode: 'ANIMATED_UNSUPPORTED',
     });
@@ -486,7 +581,7 @@ describe('ImageCompressorService', () => {
     const metadata = await sharp(withComment).metadata();
     expect(metadata.exif).toBeUndefined();
 
-    const result = await service().compress(withComment, 'LOSSY');
+    const result = await service().compress(withComment, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -522,10 +617,10 @@ describe('ImageCompressorService', () => {
     ]);
     expect((await sharp(withText).metadata()).format).toBe('png');
 
-    const cleanResult = await service().compress(clean, 'LOSSY');
+    const cleanResult = await service().compress(clean, 'LOSSY', 'LOW');
     expect(cleanResult).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
 
-    const result = await service().compress(withText, 'LOSSY');
+    const result = await service().compress(withText, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -546,7 +641,7 @@ describe('ImageCompressorService', () => {
       Buffer.from('hidden payload', 'latin1'),
     ]);
 
-    const result = await service().compress(withTrailer, 'LOSSY');
+    const result = await service().compress(withTrailer, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -575,7 +670,7 @@ describe('ImageCompressorService', () => {
       clean.subarray(2),
     ]);
 
-    const result = await service().compress(withMpf, 'LOSSY');
+    const result = await service().compress(withMpf, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -593,11 +688,11 @@ describe('ImageCompressorService', () => {
     withPriv.writeUInt32LE(withPriv.length - 8, 4);
     expect((await sharp(withPriv).metadata()).format).toBe('webp');
 
-    const trusted = await service().compress(clean, 'LOSSY');
+    const trusted = await service().compress(clean, 'LOSSY', 'LOW');
     expect(trusted).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
     if (trusted.ok) expect(trusted.bytes.equals(clean)).toBe(true);
 
-    const result = await service().compress(withPriv, 'LOSSY');
+    const result = await service().compress(withPriv, 'LOSSY', 'LOW');
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
       expect(result.kind).not.toBe('NO_SAVINGS');
@@ -636,7 +731,7 @@ describe('ImageCompressorService', () => {
       const framed = Buffer.concat([header, body]);
       expect((await sharp(framed).metadata()).pages).toBe(1);
 
-      const result = await service().compress(framed, mode);
+      const result = await service().compress(framed, mode, 'LOW');
       expect(result).toMatchObject({ ok: true });
       if (result.ok) {
         await expect(sharp(result.bytes).metadata()).resolves.toMatchObject({
@@ -658,7 +753,7 @@ describe('ImageCompressorService', () => {
     const withLyingMeta = Buffer.concat([clean, lyingMeta]);
     expect((await sharp(withLyingMeta).metadata()).format).toBe('heif');
 
-    const result = await service().compress(withLyingMeta, 'LOSSY');
+    const result = await service().compress(withLyingMeta, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) expect(result.kind).not.toBe('NO_SAVINGS');
@@ -684,12 +779,17 @@ describe('ImageCompressorService', () => {
       ]);
     };
 
-    const trusted = await service().compress(segment(canonical), 'LOSSLESS');
+    const trusted = await service().compress(
+      segment(canonical),
+      'LOSSLESS',
+      'LOW',
+    );
     expect(trusted).toMatchObject({ ok: true, kind: 'NO_SAVINGS' });
 
     const padded = await service().compress(
       segment(Buffer.concat([canonical, hidden])),
       'LOSSLESS',
+      'LOW',
     );
     expect(padded).toMatchObject({ ok: true });
     if (padded.ok) expect(padded.bytes.includes(hidden)).toBe(false);
@@ -717,7 +817,7 @@ describe('ImageCompressorService', () => {
     const fattened = Buffer.concat([riff, body]);
     expect((await sharp(fattened).metadata()).format).toBe('webp');
 
-    const result = await service().compress(fattened, 'LOSSY');
+    const result = await service().compress(fattened, 'LOSSY', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -759,7 +859,7 @@ describe('ImageCompressorService', () => {
     expect((await sharp(rotated).metadata()).orientation).toBe(6);
     const before = await sharp(rotated).ensureAlpha().raw().toBuffer();
 
-    const result = await service().compress(rotated, 'LOSSLESS');
+    const result = await service().compress(rotated, 'LOSSLESS', 'LOW');
 
     expect(result).toMatchObject({ ok: true });
     if (result.ok) {
@@ -778,7 +878,7 @@ describe('ImageCompressorService', () => {
 
   it('rejects undecodable bytes', async () => {
     expect(
-      await service().compress(Buffer.from('not an image'), 'LOSSY'),
+      await service().compress(Buffer.from('not an image'), 'LOSSY', 'LOW'),
     ).toEqual({
       ok: false,
       failureCode: 'DECODE_FAILED',
@@ -791,7 +891,11 @@ describe('ImageCompressorService', () => {
     expect(
       await service({
         WORKER_MAX_INPUT_BYTES: '1048576',
-      }).compress(Buffer.concat([input, Buffer.alloc(1_048_577)]), 'LOSSY'),
+      }).compress(
+        Buffer.concat([input, Buffer.alloc(1_048_577)]),
+        'LOSSY',
+        'LOW',
+      ),
     ).toEqual({ ok: false, failureCode: 'INPUT_TOO_LARGE' });
   });
 
@@ -799,10 +903,14 @@ describe('ImageCompressorService', () => {
     const input = await noisyImage(200, 200).jpeg().toBuffer();
 
     expect(
-      await service({ WORKER_MAX_PIXELS: '1000000' }).compress(input, 'LOSSY'),
+      await service({ WORKER_MAX_PIXELS: '1000000' }).compress(
+        input,
+        'LOSSY',
+        'LOW',
+      ),
     ).toMatchObject({ ok: true });
     const limited = service({ WORKER_MAX_PIXELS: '30000' });
-    expect(await limited.compress(input, 'LOSSY')).toEqual({
+    expect(await limited.compress(input, 'LOSSY', 'LOW')).toEqual({
       ok: false,
       failureCode: 'PIXELS_EXCEEDED',
     });

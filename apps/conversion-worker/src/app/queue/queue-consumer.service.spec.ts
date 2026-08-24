@@ -175,12 +175,14 @@ describe('QueueConsumerService', () => {
     },
   );
 
-  it('compresses in the mode the request names and falls back to lossy', async () => {
+  it('compresses at the mode and strength the request names, falling back to lossy low', async () => {
     const body = JSON.parse(message().Body as string);
 
     await service.handle(
       QUEUE_URL,
-      message({ Body: JSON.stringify({ ...body, mode: 'LOSSLESS' }) }),
+      message({
+        Body: JSON.stringify({ ...body, mode: 'LOSSLESS', strength: 'HIGH' }),
+      }),
     );
     await service.handle(QUEUE_URL, message());
 
@@ -188,11 +190,13 @@ describe('QueueConsumerService', () => {
       1,
       expect.any(Buffer),
       'LOSSLESS',
+      'HIGH',
     );
     expect(compressor.compress).toHaveBeenNthCalledWith(
       2,
       expect.any(Buffer),
       'LOSSY',
+      'LOW',
     );
   });
 
