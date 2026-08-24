@@ -31,12 +31,17 @@ export type ConversionRetentionClass = (typeof RETENTION_CLASSES)[number];
 
 export const OUTPUT_RETENTION_TAG = 'retention';
 
+export const MODES = ['LOSSLESS', 'LOSSY'] as const;
+
+export type ConversionModeName = (typeof MODES)[number];
+
 export type ConversionRequestMessage = {
   fileId: string;
   batchId: string;
   inputObjectKey: string;
   inputEtag: string;
   outputRetention: ConversionRetentionClass;
+  mode: ConversionModeName;
 };
 
 export type WorkerStartedEvent = {

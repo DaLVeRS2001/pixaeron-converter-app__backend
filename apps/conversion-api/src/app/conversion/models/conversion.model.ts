@@ -10,12 +10,14 @@ import {
 import {
   ConversionBatchStatus,
   ConversionFileStatus,
+  ConversionMode,
   ConversionPlanCode,
   ConversionResultKind,
 } from '../../../generated/prisma/client';
 
 registerEnumType(ConversionBatchStatus, { name: 'ConversionBatchStatus' });
 registerEnumType(ConversionFileStatus, { name: 'ConversionFileStatus' });
+registerEnumType(ConversionMode, { name: 'ConversionMode' });
 registerEnumType(ConversionPlanCode, { name: 'ConversionPlanCode' });
 registerEnumType(ConversionResultKind, { name: 'ConversionResultKind' });
 

@@ -15,6 +15,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import {
   isMember,
+  MODES,
   outputObjectKey,
   PAID_LARGE_QUEUE,
   queueForTier,
@@ -249,7 +250,7 @@ export class QueueConsumerService
       throw error;
     }
 
-    const result = await this.compressor.compress(input);
+    const result = await this.compressor.compress(input, request.mode);
     if (!result.ok) {
       await this.events.publish({
         type: 'RESULT',
@@ -311,7 +312,7 @@ export const parseConversionRequest = (
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
 
-  const { fileId, batchId, inputObjectKey, inputEtag, outputRetention } =
+  const { fileId, batchId, inputObjectKey, inputEtag, outputRetention, mode } =
     parsed as Record<string, unknown>;
   const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.length > 0;
@@ -332,5 +333,6 @@ export const parseConversionRequest = (
     outputRetention: isMember(RETENTION_CLASSES, outputRetention)
       ? outputRetention
       : 'standard',
+    mode: isMember(MODES, mode) ? mode : 'LOSSY',
   };
 };

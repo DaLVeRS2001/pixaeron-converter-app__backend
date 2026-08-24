@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import {
   ConversionBatchStatus,
   ConversionFileStatus,
+  ConversionMode,
 } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdmissionService } from './admission.service';
@@ -99,6 +100,7 @@ describe('AdmissionService on Postgres', () => {
           EntitlementPlanCode.ENTITLEMENT_PLAN_CODE_ANONYMOUS,
         idempotencyKey: randomUUID(),
         fileCount,
+        mode: ConversionMode.LOSSY,
       },
       snapshot,
     );
@@ -304,7 +306,13 @@ describe('AdmissionService on Postgres', () => {
   it('owns a signed-in batch by subject alone, with no minted token', async () => {
     const subject = `user:${randomUUID()}`;
     const created = await service.createBatch(
-      { subject, anonymous: false, idempotencyKey: randomUUID(), fileCount: 1 },
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey: randomUUID(),
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+      },
       anonymousSnapshot,
     );
     batchIds.push(created.batch.id);
@@ -325,7 +333,13 @@ describe('AdmissionService on Postgres', () => {
   it('admits files that become ready after the first admission', async () => {
     const subject = anonSubject();
     const created = await service.createBatch(
-      { subject, anonymous: true, idempotencyKey: randomUUID(), fileCount: 2 },
+      {
+        subject,
+        anonymous: true,
+        idempotencyKey: randomUUID(),
+        fileCount: 2,
+        mode: ConversionMode.LOSSY,
+      },
       anonymousSnapshot,
     );
     batchIds.push(created.batch.id);
@@ -392,7 +406,13 @@ describe('AdmissionService on Postgres', () => {
     const subject = anonSubject();
     const idempotencyKey = 'shared-nat-key';
     const first = await service.createBatch(
-      { subject, anonymous: true, idempotencyKey, fileCount: 1 },
+      {
+        subject,
+        anonymous: true,
+        idempotencyKey,
+        fileCount: 1,
+        mode: ConversionMode.LOSSY,
+      },
       anonymousSnapshot,
     );
 
@@ -402,6 +422,7 @@ describe('AdmissionService on Postgres', () => {
         anonymous: true,
         idempotencyKey,
         fileCount: 1,
+        mode: ConversionMode.LOSSY,
         batchToken: first.batchToken,
       },
       anonymousSnapshot,
@@ -417,6 +438,7 @@ describe('AdmissionService on Postgres', () => {
           anonymous: true,
           idempotencyKey,
           fileCount: 1,
+          mode: ConversionMode.LOSSY,
           batchToken: 'someone-elses-guess',
         },
         anonymousSnapshot,
@@ -430,11 +452,56 @@ describe('AdmissionService on Postgres', () => {
           anonymous: true,
           idempotencyKey,
           fileCount: 3,
+          mode: ConversionMode.LOSSY,
           batchToken: first.batchToken,
         },
         anonymousSnapshot,
       ),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+
+    await expect(
+      service.createBatch(
+        {
+          subject,
+          anonymous: true,
+          idempotencyKey,
+          fileCount: 1,
+          mode: ConversionMode.LOSSLESS,
+          batchToken: first.batchToken,
+        },
+        anonymousSnapshot,
+      ),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it('tells the worker which mode the batch was created in', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const created = await service.createBatch(
+      {
+        subject,
+        anonymous: false,
+        idempotencyKey: randomUUID(),
+        fileCount: 1,
+        mode: ConversionMode.LOSSLESS,
+      },
+      proSnapshot,
+    );
+    batchIds.push(created.batch.id);
+    await prisma.conversionFile.updateMany({
+      where: { batchId: created.batch.id },
+      data: {
+        status: ConversionFileStatus.READY,
+        inputBytes: 1024,
+        inputEtag: 'etag',
+      },
+    });
+
+    await service.admitReadyFiles(created.batch.id, { subject }, proSnapshot);
+
+    const [event] = await outboxEventsForBatches();
+    expect(created.batch.mode).toBe(ConversionMode.LOSSLESS);
+    expect(event.payload).toMatchObject({ mode: 'LOSSLESS' });
   });
 
   it('skips daily usage for unlimited plans and routes large paid files separately', async () => {
