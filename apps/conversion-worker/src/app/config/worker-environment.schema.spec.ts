@@ -25,7 +25,7 @@ const validate = (overrides: Record<string, string | undefined> = {}) => {
 };
 
 describe('workerEnvironmentSchema', () => {
-  it('accepts the Lightsail environment and fills the pool defaults', () => {
+  it('accepts the always-on worker environment and fills the pool defaults', () => {
     const { error, value } = validate();
 
     expect(error).toBeUndefined();

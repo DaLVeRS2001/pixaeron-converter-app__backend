@@ -18,6 +18,7 @@
       "{workspaceRoot}/.github/deploy-services.json",
       "{workspaceRoot}/.github/workflows/ci.yml",
       "{workspaceRoot}/docker-compose.production.yaml",
+      "{workspaceRoot}/docker-compose.worker.yaml",
       "{workspaceRoot}/.dockerignore",
       "{workspaceRoot}/webpack.app.config.js"
     ]
