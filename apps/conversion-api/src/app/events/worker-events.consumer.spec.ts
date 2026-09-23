@@ -25,6 +25,7 @@ const completedBody = (overrides: Record<string, unknown> = {}) =>
     outputFormat: 'jpeg',
     width: 10,
     height: 20,
+    previewObjectKey: 'outputs/batch-1/file-1/preview',
     ...overrides,
   });
 
@@ -51,7 +52,14 @@ describe('parseWorkerEvent', () => {
       outcome: 'COMPLETED',
       resultKind: 'SAVED',
       outputChecksumSha256: CHECKSUM,
+      previewObjectKey: 'outputs/batch-1/file-1/preview',
     });
+  });
+
+  it('accepts a completed result whose preview could not be made', () => {
+    expect(
+      parseWorkerEvent(completedBody({ previewObjectKey: null })),
+    ).toMatchObject({ outcome: 'COMPLETED', previewObjectKey: null });
   });
 
   it('accepts a failed result', () => {
@@ -87,6 +95,12 @@ describe('parseWorkerEvent', () => {
     ['a malformed checksum', completedBody({ outputChecksumSha256: 'nope' })],
     ['a missing checksum', completedBody({ outputChecksumSha256: '' })],
     ['a negative output size', completedBody({ outputBytes: -1 })],
+    [
+      'a completed result that never mentions a preview',
+      completedBody({ previewObjectKey: undefined }),
+    ],
+    ['an empty preview key', completedBody({ previewObjectKey: '' })],
+    ['a preview key that is not text', completedBody({ previewObjectKey: 7 })],
     ['a failed result without a code', completedBody({ outcome: 'FAILED' })],
     ['an unknown outcome', completedBody({ outcome: 'MAYBE' })],
   ])('rejects %s', (_case, body) => {

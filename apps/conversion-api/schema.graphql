@@ -73,6 +73,7 @@ type ConversionFile {
   height: Int
   failureCode: String
   downloadUrl: String
+  previewUrl: String
   expiresAt: DateTime!
   upload: ConversionUploadTarget
 }

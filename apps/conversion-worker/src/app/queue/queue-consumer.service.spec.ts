@@ -10,11 +10,15 @@ import type { Message } from '@aws-sdk/client-sqs';
 const QUEUE_URL =
   'https://sqs.eu-central-1.amazonaws.com/123456789012/pixaeron-conversion-anon-dev';
 const progressFile = join(tmpdir(), `pixaeron-worker-spec-${randomUUID()}`);
+const OUTPUT_BYTES = Buffer.from('output-bytes');
+const PREVIEW_BYTES = Buffer.from('preview-bytes');
+const checksumOf = (bytes: Buffer) =>
+  createHash('sha256').update(bytes).digest('base64');
 
 describe('QueueConsumerService', () => {
   let client: { send: jest.Mock; destroy: jest.Mock };
   let storage: { getInput: jest.Mock; putOutput: jest.Mock };
-  let compressor: { compress: jest.Mock };
+  let compressor: { compress: jest.Mock; preview: jest.Mock };
   let events: { publish: jest.Mock };
   let service: QueueConsumerService;
 
@@ -28,13 +32,14 @@ describe('QueueConsumerService', () => {
       compress: jest.fn().mockResolvedValue({
         ok: true,
         kind: 'SAVED',
-        bytes: Buffer.from('output-bytes'),
+        bytes: OUTPUT_BYTES,
         format: 'jpeg',
         contentType: 'image/jpeg',
         frames: 1,
         width: 10,
         height: 20,
       }),
+      preview: jest.fn().mockResolvedValue(PREVIEW_BYTES),
     };
     events = { publish: jest.fn().mockResolvedValue(undefined) };
     service = new QueueConsumerService(
@@ -83,11 +88,21 @@ describe('QueueConsumerService', () => {
       'inputs/batch-1/file-1',
       'etag-1',
     );
-    expect(storage.putOutput).toHaveBeenCalledWith(
+    expect(storage.putOutput).toHaveBeenNthCalledWith(
+      1,
       'outputs/batch-1/file-1/2',
-      Buffer.from('output-bytes'),
+      OUTPUT_BYTES,
       'image/jpeg',
-      createHash('sha256').update(Buffer.from('output-bytes')).digest('base64'),
+      checksumOf(OUTPUT_BYTES),
+      'standard',
+    );
+    expect(compressor.preview).toHaveBeenCalledWith(OUTPUT_BYTES);
+    expect(storage.putOutput).toHaveBeenNthCalledWith(
+      2,
+      'outputs/batch-1/file-1/2/preview',
+      PREVIEW_BYTES,
+      'image/webp',
+      checksumOf(PREVIEW_BYTES),
       'standard',
     );
     expect(events.publish).toHaveBeenNthCalledWith(2, {
@@ -101,13 +116,48 @@ describe('QueueConsumerService', () => {
       frameCount: 1,
       outputObjectKey: 'outputs/batch-1/file-1/2',
       outputBytes: 12,
-      outputChecksumSha256: createHash('sha256')
-        .update(Buffer.from('output-bytes'))
-        .digest('base64'),
+      outputChecksumSha256: checksumOf(OUTPUT_BYTES),
       outputFormat: 'jpeg',
       width: 10,
       height: 20,
+      previewObjectKey: 'outputs/batch-1/file-1/2/preview',
     });
+    expect(sentCommands()).toContain('DeleteMessageCommand');
+  });
+
+  it.each([
+    [
+      'the preview cannot be encoded',
+      () => compressor.preview.mockRejectedValue(new Error('vips: bad tile')),
+    ],
+    [
+      'the preview upload fails',
+      () =>
+        storage.putOutput.mockImplementation((objectKey: string) =>
+          objectKey.endsWith('/preview')
+            ? Promise.reject(new Error('socket hang up'))
+            : Promise.resolve(),
+        ),
+    ],
+  ])('still completes the file when %s', async (_case, arrange) => {
+    arrange();
+
+    await service.handle(QUEUE_URL, message());
+
+    expect(storage.putOutput).toHaveBeenCalledWith(
+      'outputs/batch-1/file-1/2',
+      OUTPUT_BYTES,
+      'image/jpeg',
+      checksumOf(OUTPUT_BYTES),
+      'standard',
+    );
+    expect(events.publish).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        outcome: 'COMPLETED',
+        outputObjectKey: 'outputs/batch-1/file-1/2',
+        previewObjectKey: null,
+      }),
+    );
     expect(sentCommands()).toContain('DeleteMessageCommand');
   });
 

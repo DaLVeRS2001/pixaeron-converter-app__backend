@@ -73,6 +73,9 @@ export class ConversionFile {
   @Field(() => String, { nullable: true })
   downloadUrl!: string | null;
 
+  @Field(() => String, { nullable: true })
+  previewUrl!: string | null;
+
   @Field()
   expiresAt!: Date;
 

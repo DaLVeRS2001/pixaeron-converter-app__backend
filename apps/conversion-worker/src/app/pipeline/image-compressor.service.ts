@@ -51,6 +51,8 @@ const JFIF_THUMB_AT = 12;
 const EXIF_ORIENTATION_TAG = 0x0112;
 const PALETTE_LIMIT = 256;
 const LOSSY_MIN_SAVING = 0.1;
+const PREVIEW_EDGE = 192;
+const PREVIEW_QUALITY = 72;
 const LOSSY_QUALITY: Record<
   ConversionStrengthName,
   Record<ConversionImageFormat, number>
@@ -177,6 +179,19 @@ export class ImageCompressorService {
     } catch {
       return { ok: false, failureCode: 'DECODE_FAILED' };
     }
+  }
+
+  preview(output: Buffer): Promise<Buffer> {
+    return sharp(output, { limitInputPixels: this.maxPixels })
+      .rotate()
+      .resize({
+        width: PREVIEW_EDGE,
+        height: PREVIEW_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: PREVIEW_QUALITY })
+      .toBuffer();
   }
 
   private async encodeLossy(

@@ -362,6 +362,7 @@ export class ConversionResolver {
 
     const completed = file.status === ConversionFileStatus.COMPLETED;
     const outputObjectKey = completed ? file.outputObjectKey : null;
+    const previewObjectKey = completed ? file.previewObjectKey : null;
 
     return {
       id: file.id,
@@ -376,6 +377,9 @@ export class ConversionResolver {
       downloadUrl:
         outputObjectKey &&
         (await this.storage.presignDownload(outputObjectKey)),
+      previewUrl:
+        previewObjectKey &&
+        (await this.storage.presignPreview(previewObjectKey)),
       expiresAt: file.expiresAt,
       upload: target && {
         url: target.url,

@@ -190,6 +190,7 @@ describe('ConversionResolver file listing', () => {
     inputObjectKey: 'inputs/batch-1/file-1',
     inputEtag: 'etag',
     outputObjectKey: 'outputs/batch-1/file-1/1',
+    previewObjectKey: 'outputs/batch-1/file-1/1/preview',
     inputFormat: 'jpeg',
     outputFormat: 'jpeg',
     inputBytes: BigInt(2048),
@@ -216,6 +217,9 @@ describe('ConversionResolver file listing', () => {
     const storage = {
       presignDownload: jest.fn((objectKey: string) =>
         Promise.resolve(`https://bucket/${objectKey}?download`),
+      ),
+      presignPreview: jest.fn((objectKey: string) =>
+        Promise.resolve(`https://bucket/${objectKey}?preview`),
       ),
     };
     const resolver = new ConversionResolver(
@@ -260,8 +264,8 @@ describe('ConversionResolver file listing', () => {
     },
   );
 
-  it('presigns the download for a stored result and passes the expiry through', async () => {
-    const { resolver } = buildResolver([storedFile()], 7);
+  it('presigns the preview beside the download and passes the expiry through', async () => {
+    const { resolver, storage } = buildResolver([storedFile()], 7);
 
     const page = await resolver.myConversionFiles(null, null, signedIn);
 
@@ -272,13 +276,31 @@ describe('ConversionResolver file listing', () => {
         status: ConversionFileStatus.COMPLETED,
         outputBytes: 1024,
         downloadUrl: 'https://bucket/outputs/batch-1/file-1/1?download',
+        previewUrl: 'https://bucket/outputs/batch-1/file-1/1/preview?preview',
         expiresAt,
         upload: null,
       }),
     ]);
+    expect(storage.presignPreview).toHaveBeenCalledWith(
+      'outputs/batch-1/file-1/1/preview',
+    );
   });
 
-  it('serves no download url until the result is stored', async () => {
+  it('serves no preview url when the worker stored no preview', async () => {
+    const { resolver, storage } = buildResolver([
+      storedFile({ previewObjectKey: null }),
+    ]);
+
+    const page = await resolver.myConversionFiles(null, null, signedIn);
+
+    expect(page.items[0]).toMatchObject({
+      downloadUrl: 'https://bucket/outputs/batch-1/file-1/1?download',
+      previewUrl: null,
+    });
+    expect(storage.presignPreview).not.toHaveBeenCalled();
+  });
+
+  it('serves neither url until the result is stored', async () => {
     const { resolver, storage } = buildResolver([
       storedFile({ status: ConversionFileStatus.PROCESSING }),
     ]);
@@ -288,8 +310,10 @@ describe('ConversionResolver file listing', () => {
     expect(page.items[0]).toMatchObject({
       status: ConversionFileStatus.PROCESSING,
       downloadUrl: null,
+      previewUrl: null,
       expiresAt,
     });
     expect(storage.presignDownload).not.toHaveBeenCalled();
+    expect(storage.presignPreview).not.toHaveBeenCalled();
   });
 });

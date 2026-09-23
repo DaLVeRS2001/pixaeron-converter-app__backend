@@ -73,6 +73,7 @@ export type WorkerResultEvent = {
       outputFormat: string;
       width: number;
       height: number;
+      previewObjectKey: string | null;
     }
   | {
       outcome: 'FAILED';

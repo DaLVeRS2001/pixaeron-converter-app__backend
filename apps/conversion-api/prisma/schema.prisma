@@ -84,28 +84,29 @@ model ConversionBatch {
 }
 
 model ConversionFile {
-  id              String                @id @default(uuid())
-  batchId         String                @map("batch_id")
-  status          ConversionFileStatus  @default(UPLOADING)
-  inputObjectKey  String                @unique @map("input_object_key")
-  inputEtag       String?               @map("input_etag")
-  outputObjectKey String?               @unique @map("output_object_key")
-  inputFormat     String?               @map("input_format")
-  outputFormat    String?               @map("output_format")
-  inputBytes      BigInt?               @map("input_bytes")
-  outputBytes     BigInt?               @map("output_bytes")
-  outputChecksum  String?               @map("output_checksum")
-  resultKind      ConversionResultKind? @map("result_kind")
-  width           Int?
-  height          Int?
-  frameCount      Int?                  @map("frame_count")
-  attempt         Int                   @default(0)
-  failureCode     String?               @map("failure_code")
-  startedAt       DateTime?             @map("started_at")
-  completedAt     DateTime?             @map("completed_at")
-  expiresAt       DateTime              @map("expires_at")
-  createdAt       DateTime              @default(now()) @map("created_at")
-  updatedAt       DateTime              @updatedAt @map("updated_at")
+  id               String                @id @default(uuid())
+  batchId          String                @map("batch_id")
+  status           ConversionFileStatus  @default(UPLOADING)
+  inputObjectKey   String                @unique @map("input_object_key")
+  inputEtag        String?               @map("input_etag")
+  outputObjectKey  String?               @unique @map("output_object_key")
+  previewObjectKey String?               @map("preview_object_key")
+  inputFormat      String?               @map("input_format")
+  outputFormat     String?               @map("output_format")
+  inputBytes       BigInt?               @map("input_bytes")
+  outputBytes      BigInt?               @map("output_bytes")
+  outputChecksum   String?               @map("output_checksum")
+  resultKind       ConversionResultKind? @map("result_kind")
+  width            Int?
+  height           Int?
+  frameCount       Int?                  @map("frame_count")
+  attempt          Int                   @default(0)
+  failureCode      String?               @map("failure_code")
+  startedAt        DateTime?             @map("started_at")
+  completedAt      DateTime?             @map("completed_at")
+  expiresAt        DateTime              @map("expires_at")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
 
   batch ConversionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 

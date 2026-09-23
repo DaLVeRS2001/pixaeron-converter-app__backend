@@ -917,4 +917,48 @@ describe('ImageCompressorService', () => {
       failureCode: 'PIXELS_EXCEEDED',
     });
   });
+
+  it('shrinks a result into a webp preview that fits 192 pixels on its longest edge', async () => {
+    const result = await photoImage(600, 400).jpeg({ quality: 80 }).toBuffer();
+
+    const preview = await service().preview(result);
+
+    expect(await sharp(preview).metadata()).toMatchObject({
+      format: 'webp',
+      width: 192,
+      height: 128,
+    });
+    expect(preview.length).toBeLessThan(result.length);
+  });
+
+  it('never enlarges a result that already fits the preview box', async () => {
+    const result = await gradientImage(64, 48).png().toBuffer();
+
+    const preview = await service().preview(result);
+
+    expect(await sharp(preview).metadata()).toMatchObject({
+      format: 'webp',
+      width: 64,
+      height: 48,
+    });
+  });
+
+  it('bakes a stored orientation into upright preview pixels', async () => {
+    const result = await noisyImage(200, 100)
+      .jpeg({ quality: 90 })
+      .withMetadata({ orientation: 6 })
+      .toBuffer();
+
+    const preview = await service().preview(result);
+
+    const metadata = await sharp(preview).metadata();
+    expect(metadata).toMatchObject({ width: 96, height: 192 });
+    expect(metadata.orientation).toBeUndefined();
+  });
+
+  it('refuses to preview bytes that are not an image', async () => {
+    await expect(
+      service().preview(Buffer.from('not an image')),
+    ).rejects.toThrow();
+  });
 });
