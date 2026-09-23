@@ -21,6 +21,7 @@ services:
       resources:
         limits:
           memory: 3072m
+    memswap_limit: 3072m
     healthcheck:
       test:
         - CMD
