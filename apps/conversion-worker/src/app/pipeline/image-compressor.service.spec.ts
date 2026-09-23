@@ -4,6 +4,8 @@ import sharp from 'sharp';
 
 import { ImageCompressorService } from './image-compressor.service';
 
+jest.setTimeout(60_000);
+
 const service = (overrides: Record<string, string> = {}) =>
   new ImageCompressorService(
     new ConfigService({

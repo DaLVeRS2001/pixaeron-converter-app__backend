@@ -44,6 +44,7 @@
           - debian-keyring
           - fail2ban
           - python3-debian
+          - ufw
         state: present
         update_cache: true
         cache_valid_time: 3600
@@ -231,6 +232,24 @@
         name: fail2ban
         enabled: true
         state: started
+
+    - name: Allow SSH through the host firewall
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+      when: "'worker_vps' in group_names"
+
+    - name: Deny every other inbound connection by default
+      community.general.ufw:
+        default: deny
+        direction: incoming
+      when: "'worker_vps' in group_names"
+
+    - name: Enable the host firewall
+      community.general.ufw:
+        state: enabled
+      when: "'worker_vps' in group_names"
 
     - name: Install SSH hardening settings
       ansible.builtin.copy:
