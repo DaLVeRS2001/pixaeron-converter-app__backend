@@ -2,7 +2,12 @@ import {
   EntitlementPlanCode,
   type EntitlementSnapshot,
 } from '@pixaeron/entitlements-contract';
+import type { HttpContext } from '@pixaeron/nestjs';
 
+import {
+  ConversionFileStatus,
+  type ConversionFile as ConversionFileRow,
+} from '../../generated/prisma/client';
 import { ConversionResolver } from './conversion.resolver';
 
 const proSnapshot: EntitlementSnapshot = {
@@ -162,5 +167,129 @@ describe('ConversionResolver request identity', () => {
         response: expect.objectContaining({ code: 'IDENTITY_HEADER_INVALID' }),
       }),
     );
+  });
+});
+
+describe('ConversionResolver file listing', () => {
+  const publicId = '3f2c1a84-9d5e-4b7a-8c6f-0e1d2a3b4c5d';
+  const expiresAt = new Date('2026-09-26T10:00:00Z');
+
+  const contextFor = (headers: Record<string, string>) =>
+    ({
+      req: { headers, ip: '203.0.113.9', socket: {} },
+    }) as unknown as HttpContext;
+
+  const signedIn = contextFor({ 'x-authenticated-sub': publicId });
+
+  const storedFile = (
+    overrides: Partial<ConversionFileRow> = {},
+  ): ConversionFileRow => ({
+    id: 'file-1',
+    batchId: 'batch-1',
+    status: ConversionFileStatus.COMPLETED,
+    inputObjectKey: 'inputs/batch-1/file-1',
+    inputEtag: 'etag',
+    outputObjectKey: 'outputs/batch-1/file-1/1',
+    inputFormat: 'jpeg',
+    outputFormat: 'jpeg',
+    inputBytes: BigInt(2048),
+    outputBytes: BigInt(1024),
+    outputChecksum: 'checksum',
+    resultKind: 'SAVED',
+    width: 10,
+    height: 20,
+    frameCount: 1,
+    attempt: 1,
+    failureCode: null,
+    startedAt: null,
+    completedAt: null,
+    expiresAt,
+    createdAt: new Date('2026-09-24T10:00:00Z'),
+    updatedAt: new Date('2026-09-24T10:00:00Z'),
+    ...overrides,
+  });
+
+  const buildResolver = (items: ConversionFileRow[], total = items.length) => {
+    const admission = {
+      listFiles: jest.fn().mockResolvedValue({ items, total }),
+    };
+    const storage = {
+      presignDownload: jest.fn((objectKey: string) =>
+        Promise.resolve(`https://bucket/${objectKey}?download`),
+      ),
+    };
+    const resolver = new ConversionResolver(
+      admission as never,
+      {} as never,
+      {} as never,
+      { subjectFor: (ip: string) => `anon:${ip}` } as never,
+      storage as never,
+    );
+
+    return { resolver, admission, storage };
+  };
+
+  it('refuses to list files for a visitor who is not signed in', async () => {
+    const { resolver, admission } = buildResolver([]);
+
+    await expect(
+      resolver.myConversionFiles(null, null, contextFor({})),
+    ).rejects.toMatchObject({
+      status: 401,
+      response: { code: 'UNAUTHENTICATED' },
+    });
+    expect(admission.listFiles).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [null, null, 20, 0],
+    [500, -3, 50, 0],
+    [0, 7, 1, 7],
+  ])(
+    'clamps a page of limit %s at offset %s to %s from %s',
+    async (limit, offset, expectedLimit, expectedOffset) => {
+      const { resolver, admission } = buildResolver([]);
+
+      await resolver.myConversionFiles(limit, offset, signedIn);
+
+      expect(admission.listFiles).toHaveBeenCalledWith(
+        `user:${publicId}`,
+        expectedLimit,
+        expectedOffset,
+      );
+    },
+  );
+
+  it('presigns the download for a stored result and passes the expiry through', async () => {
+    const { resolver } = buildResolver([storedFile()], 7);
+
+    const page = await resolver.myConversionFiles(null, null, signedIn);
+
+    expect(page.total).toBe(7);
+    expect(page.items).toEqual([
+      expect.objectContaining({
+        id: 'file-1',
+        status: ConversionFileStatus.COMPLETED,
+        outputBytes: 1024,
+        downloadUrl: 'https://bucket/outputs/batch-1/file-1/1?download',
+        expiresAt,
+        upload: null,
+      }),
+    ]);
+  });
+
+  it('serves no download url until the result is stored', async () => {
+    const { resolver, storage } = buildResolver([
+      storedFile({ status: ConversionFileStatus.PROCESSING }),
+    ]);
+
+    const page = await resolver.myConversionFiles(null, null, signedIn);
+
+    expect(page.items[0]).toMatchObject({
+      status: ConversionFileStatus.PROCESSING,
+      downloadUrl: null,
+      expiresAt,
+    });
+    expect(storage.presignDownload).not.toHaveBeenCalled();
   });
 });

@@ -47,12 +47,16 @@ import {
   ConversionBatchPage,
   ConversionEntitlement,
   ConversionFile,
+  ConversionFilePage,
 } from './models/conversion.model';
 
 const AUTHENTICATED_SUBJECT_HEADER = 'x-authenticated-sub';
 
 const USER_PUBLIC_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 50;
 
 type RequestIdentity = {
   subject: string;
@@ -208,22 +212,12 @@ export class ConversionResolver {
     @Args('offset', { type: () => Int, nullable: true }) offset: number | null,
     @Context() context: HttpContext,
   ): Promise<ConversionBatchPage> {
-    const identity = this.identityFrom(context);
-    if (!identity.userPublicId) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.UNAUTHORIZED,
-          code: 'UNAUTHENTICATED',
-          message: 'Sign in to list your conversions',
-        },
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
+    const identity = this.signedInIdentityFrom(context);
+    const window = pageWindow(limit, offset);
     const page = await this.admission.listBatches(
       identity.subject,
-      Math.min(Math.max(limit ?? 20, 1), 50),
-      Math.max(offset ?? 0, 0),
+      window.limit,
+      window.offset,
     );
 
     return {
@@ -231,6 +225,28 @@ export class ConversionResolver {
         page.items.map((batch) =>
           this.toBatchModel(batch, batch.files, null, null),
         ),
+      ),
+      total: page.total,
+    };
+  }
+
+  @Query(() => ConversionFilePage)
+  async myConversionFiles(
+    @Args('limit', { type: () => Int, nullable: true }) limit: number | null,
+    @Args('offset', { type: () => Int, nullable: true }) offset: number | null,
+    @Context() context: HttpContext,
+  ): Promise<ConversionFilePage> {
+    const identity = this.signedInIdentityFrom(context);
+    const window = pageWindow(limit, offset);
+    const page = await this.admission.listFiles(
+      identity.subject,
+      window.limit,
+      window.offset,
+    );
+
+    return {
+      items: await Promise.all(
+        page.items.map((file) => this.toFileModel(file, null)),
       ),
       total: page.total,
     };
@@ -297,6 +313,22 @@ export class ConversionResolver {
     return { subject: this.identity.subjectFor(ip), userPublicId: null };
   }
 
+  private signedInIdentityFrom(context: HttpContext): RequestIdentity {
+    const identity = this.identityFrom(context);
+    if (identity.userPublicId === null) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.UNAUTHORIZED,
+          code: 'UNAUTHENTICATED',
+          message: 'Sign in to list your conversions',
+        },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    return identity;
+  }
+
   private async toBatchModel(
     batch: ConversionBatchRow,
     files: ConversionFileRow[],
@@ -310,49 +342,59 @@ export class ConversionResolver {
       expiresAt: batch.expiresAt,
       batchToken,
       files: await Promise.all(
-        files.map(async (file): Promise<ConversionFile> => {
-          const presignable =
-            snapshot !== null && file.status === ConversionFileStatus.UPLOADING;
-          const target = presignable
-            ? await this.storage.presignUpload(
-                file.inputObjectKey,
-                snapshot.maxFileBytes,
-              )
-            : null;
-
-          const outputObjectKey =
-            file.status === ConversionFileStatus.COMPLETED
-              ? file.outputObjectKey
-              : null;
-
-          return {
-            id: file.id,
-            status: file.status,
-            inputBytes:
-              file.inputBytes === null ? null : Number(file.inputBytes),
-            resultKind: file.resultKind,
-            outputBytes:
-              file.outputBytes === null ? null : Number(file.outputBytes),
-            outputFormat: file.outputFormat,
-            width: file.width,
-            height: file.height,
-            failureCode: file.failureCode,
-            downloadUrl:
-              outputObjectKey &&
-              (await this.storage.presignDownload(outputObjectKey)),
-            upload: target && {
-              url: target.url,
-              fields: Object.entries(target.fields).map(([name, value]) => ({
-                name,
-                value,
-              })),
-            },
-          };
-        }),
+        files.map((file) => this.toFileModel(file, snapshot)),
       ),
     };
   }
+
+  private async toFileModel(
+    file: ConversionFileRow,
+    snapshot: EntitlementSnapshot | null,
+  ): Promise<ConversionFile> {
+    const presignable =
+      snapshot !== null && file.status === ConversionFileStatus.UPLOADING;
+    const target = presignable
+      ? await this.storage.presignUpload(
+          file.inputObjectKey,
+          snapshot.maxFileBytes,
+        )
+      : null;
+
+    const completed = file.status === ConversionFileStatus.COMPLETED;
+    const outputObjectKey = completed ? file.outputObjectKey : null;
+
+    return {
+      id: file.id,
+      status: file.status,
+      inputBytes: file.inputBytes === null ? null : Number(file.inputBytes),
+      resultKind: file.resultKind,
+      outputBytes: file.outputBytes === null ? null : Number(file.outputBytes),
+      outputFormat: file.outputFormat,
+      width: file.width,
+      height: file.height,
+      failureCode: file.failureCode,
+      downloadUrl:
+        outputObjectKey &&
+        (await this.storage.presignDownload(outputObjectKey)),
+      expiresAt: file.expiresAt,
+      upload: target && {
+        url: target.url,
+        fields: Object.entries(target.fields).map(([name, value]) => ({
+          name,
+          value,
+        })),
+      },
+    };
+  }
 }
+
+const pageWindow = (
+  limit: number | null,
+  offset: number | null,
+): { limit: number; offset: number } => ({
+  limit: Math.min(Math.max(limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE),
+  offset: Math.max(offset ?? 0, 0),
+});
 
 function rethrowAdmissionError(error: unknown): never {
   if (!(error instanceof AdmissionError)) throw error;

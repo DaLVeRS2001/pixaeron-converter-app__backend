@@ -445,6 +445,28 @@ export class AdmissionService {
     return { items, total };
   }
 
+  async listFiles(
+    subject: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ items: ConversionFile[]; total: number }> {
+    const listed = {
+      status: { in: LIVE_FILE_STATUSES },
+      batch: { subject },
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.conversionFile.findMany({
+        where: listed,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.conversionFile.count({ where: listed }),
+    ]);
+
+    return { items, total };
+  }
+
   async storageBytesUsed(subject: string): Promise<number> {
     return this.storageUsedFor(this.prisma, subject);
   }

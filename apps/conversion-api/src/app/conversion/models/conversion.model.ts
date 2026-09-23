@@ -73,6 +73,9 @@ export class ConversionFile {
   @Field(() => String, { nullable: true })
   downloadUrl!: string | null;
 
+  @Field()
+  expiresAt!: Date;
+
   @Field(() => ConversionUploadTarget, { nullable: true })
   upload!: ConversionUploadTarget | null;
 }
@@ -144,6 +147,15 @@ export class ConversionEntitlement {
 export class ConversionBatchPage {
   @Field(() => [ConversionBatch])
   items!: ConversionBatch[];
+
+  @Field(() => Int)
+  total!: number;
+}
+
+@ObjectType()
+export class ConversionFilePage {
+  @Field(() => [ConversionFile])
+  items!: ConversionFile[];
 
   @Field(() => Int)
   total!: number;
