@@ -155,6 +155,9 @@ const SHA256_BASE64 = /^[A-Za-z0-9+/]{43}=$/;
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0;
 
+const isNullOrNonEmptyString = (value: unknown): value is string | null =>
+  value === null || isNonEmptyString(value);
+
 const isPositiveInteger = (value: unknown): value is number =>
   typeof value === 'number' &&
   Number.isInteger(value) &&
@@ -206,6 +209,7 @@ export const parseWorkerEvent = (
     outputFormat,
     width,
     height,
+    previewObjectKey,
   } = event;
   if (
     !isMember(RESULT_KINDS, resultKind) ||
@@ -217,7 +221,8 @@ export const parseWorkerEvent = (
     !isPositiveInteger(frameCount) ||
     !isPositiveInteger(outputBytes) ||
     !isPositiveInteger(width) ||
-    !isPositiveInteger(height)
+    !isPositiveInteger(height) ||
+    !isNullOrNonEmptyString(previewObjectKey)
   ) {
     return null;
   }
@@ -235,5 +240,6 @@ export const parseWorkerEvent = (
     outputFormat,
     width,
     height,
+    previewObjectKey,
   };
 };

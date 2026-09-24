@@ -18,6 +18,7 @@ import {
   MODES,
   outputObjectKey,
   PAID_LARGE_QUEUE,
+  previewObjectKey,
   queueForTier,
   STRENGTHS,
   queueUrl,
@@ -268,7 +269,7 @@ export class QueueConsumerService
     }
 
     const objectKey = outputObjectKey(request.batchId, request.fileId, attempt);
-    const checksum = createHash('sha256').update(result.bytes).digest('base64');
+    const checksum = sha256(result.bytes);
     await this.storage.putOutput(
       objectKey,
       result.bytes,
@@ -276,6 +277,27 @@ export class QueueConsumerService
       checksum,
       request.outputRetention,
     );
+    let storedPreviewKey: string | null = null;
+    try {
+      const preview = await this.compressor.preview(result.bytes);
+      const previewKey = previewObjectKey(
+        request.batchId,
+        request.fileId,
+        attempt,
+      );
+      await this.storage.putOutput(
+        previewKey,
+        preview,
+        'image/webp',
+        sha256(preview),
+        request.outputRetention,
+      );
+      storedPreviewKey = previewKey;
+    } catch (error) {
+      this.logger.warn(
+        `Preview for file ${request.fileId} skipped: ${(error as Error).message}`,
+      );
+    }
     await this.events.publish({
       type: 'RESULT',
       ...base,
@@ -289,6 +311,7 @@ export class QueueConsumerService
       outputFormat: result.format,
       width: result.width,
       height: result.height,
+      previewObjectKey: storedPreviewKey,
     });
     await this.deleteMessage(url, message.ReceiptHandle);
   }
@@ -305,6 +328,9 @@ export class QueueConsumerService
     );
   }
 }
+
+const sha256 = (bytes: Buffer): string =>
+  createHash('sha256').update(bytes).digest('base64');
 
 export const parseConversionRequest = (
   body: string,

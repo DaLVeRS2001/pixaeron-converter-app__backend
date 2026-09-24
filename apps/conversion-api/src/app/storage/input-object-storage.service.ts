@@ -11,6 +11,8 @@ import { ConfigService } from '@nestjs/config';
 
 const UPLOAD_URL_TTL_SECONDS = 900;
 const DOWNLOAD_URL_TTL_SECONDS = 300;
+const PREVIEW_SIGNING_WINDOW_MS = 60 * 60 * 1000;
+const PREVIEW_URL_TTL_SECONDS = (2 * PREVIEW_SIGNING_WINDOW_MS) / 1000;
 
 export type UploadTarget = {
   url: string;
@@ -88,6 +90,21 @@ export class InputObjectStorageService {
       this.client,
       new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
       { expiresIn: DOWNLOAD_URL_TTL_SECONDS },
+    );
+  }
+
+  presignPreview(objectKey: string): Promise<string> {
+    const signingWindowStart =
+      Math.floor(Date.now() / PREVIEW_SIGNING_WINDOW_MS) *
+      PREVIEW_SIGNING_WINDOW_MS;
+
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      {
+        expiresIn: PREVIEW_URL_TTL_SECONDS,
+        signingDate: new Date(signingWindowStart),
+      },
     );
   }
 }

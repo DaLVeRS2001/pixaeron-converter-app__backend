@@ -73,6 +73,8 @@ type ConversionFile {
   height: Int
   failureCode: String
   downloadUrl: String
+  previewUrl: String
+  expiresAt: DateTime!
   upload: ConversionUploadTarget
 }
 
@@ -93,6 +95,11 @@ enum ConversionResultKind {
   SANITIZED_LARGER
 }
 
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
 type ConversionBatch {
   id: ID!
   status: ConversionBatchStatus!
@@ -112,11 +119,6 @@ enum ConversionBatchStatus {
   CANCELLED
   EXPIRED
 }
-
-"""
-A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
-"""
-scalar DateTime
 
 type CompleteConversionUploadsPayload {
   batch: ConversionBatch!
@@ -148,10 +150,16 @@ type ConversionBatchPage {
   total: Int!
 }
 
+type ConversionFilePage {
+  items: [ConversionFile!]!
+  total: Int!
+}
+
 type Query {
   conversionBatch(id: ID!, batchToken: String): ConversionBatch!
   conversionEntitlement: ConversionEntitlement!
   myConversionBatches(limit: Int, offset: Int): ConversionBatchPage!
+  myConversionFiles(limit: Int, offset: Int): ConversionFilePage!
   _service: _Service!
 }
 

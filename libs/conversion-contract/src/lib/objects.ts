@@ -3,3 +3,9 @@ export const outputObjectKey = (
   fileId: string,
   attempt: number,
 ): string => `outputs/${batchId}/${fileId}/${attempt}`;
+
+export const previewObjectKey = (
+  batchId: string,
+  fileId: string,
+  attempt: number,
+): string => `${outputObjectKey(batchId, fileId, attempt)}/preview`;

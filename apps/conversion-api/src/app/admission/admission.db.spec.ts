@@ -684,4 +684,56 @@ describe('AdmissionService on Postgres', () => {
       living.files[0].id,
     ]);
   });
+
+  it('pages files newest first and counts the whole set on every page', async () => {
+    const subject = `user:${randomUUID()}`;
+    subjects.push(subject);
+    const older = await readyBatch(subject, proSnapshot, 2);
+    const newer = await readyBatch(subject, proSnapshot, 2);
+    await prisma.conversionFile.updateMany({
+      where: { batchId: older.batch.id },
+      data: { createdAt: new Date('2026-09-01T00:00:00Z') },
+    });
+    await prisma.conversionFile.updateMany({
+      where: { batchId: newer.batch.id },
+      data: { createdAt: new Date('2026-09-02T00:00:00Z') },
+    });
+    const newestFirst = (files: Array<{ id: string }>) =>
+      files
+        .map(({ id }) => id)
+        .sort()
+        .reverse();
+
+    const firstPage = await service.listFiles(subject, 3, 0);
+    const secondPage = await service.listFiles(subject, 3, 3);
+
+    expect(firstPage.total).toBe(4);
+    expect(secondPage.total).toBe(4);
+    expect(
+      [...firstPage.items, ...secondPage.items].map(({ id }) => id),
+    ).toEqual([...newestFirst(newer.files), ...newestFirst(older.files)]);
+    expect(firstPage.items).toHaveLength(3);
+    expect(secondPage.items).toHaveLength(1);
+  });
+
+  it('lists only the live files of the subject', async () => {
+    const subject = `user:${randomUUID()}`;
+    const stranger = `user:${randomUUID()}`;
+    subjects.push(subject, stranger);
+    const own = await readyBatch(subject, proSnapshot, 2);
+    await readyBatch(stranger, proSnapshot, 1);
+    await prisma.conversionFile.update({
+      where: { id: own.files[0].id },
+      data: { status: ConversionFileStatus.EXPIRED },
+    });
+    await prisma.conversionFile.update({
+      where: { id: own.files[1].id },
+      data: { status: ConversionFileStatus.COMPLETED },
+    });
+
+    const page = await service.listFiles(subject, 10, 0);
+
+    expect(page.total).toBe(1);
+    expect(page.items.map(({ id }) => id)).toEqual([own.files[1].id]);
+  });
 });

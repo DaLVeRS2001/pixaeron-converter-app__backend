@@ -113,6 +113,7 @@ describe('WorkerEventProcessorService on Postgres', () => {
     outputFormat: 'jpeg',
     width: 10,
     height: 20,
+    previewObjectKey: `outputs/${batchId}/${fileId}/${attempt}/preview`,
   });
 
   const failedEvent = (
@@ -175,10 +176,25 @@ describe('WorkerEventProcessorService on Postgres', () => {
       frameCount: 1,
       width: 10,
       height: 20,
+      previewObjectKey: `outputs/${batch.id}/${batch.files[0].id}/1/preview`,
     });
     expect(Number(file.outputBytes)).toBe(OUTPUT_BYTES.length);
     expect(file.outputChecksum).toBe(CHECKSUM);
     expect(await batchStatus(batch.id)).toBe(ConversionBatchStatus.COMPLETED);
+  });
+
+  it('completes a file whose preview the worker could not make', async () => {
+    const batch = await seedBatch(1);
+
+    await processor.apply({
+      ...completedEvent(batch.id, batch.files[0].id),
+      previewObjectKey: null,
+    });
+
+    expect(await fileStatus(batch.files[0].id)).toMatchObject({
+      status: ConversionFileStatus.COMPLETED,
+      previewObjectKey: null,
+    });
   });
 
   it('ignores a replayed result once the file is terminal', async () => {
@@ -244,6 +260,22 @@ describe('WorkerEventProcessorService on Postgres', () => {
       processor.apply({ ...event, outputObjectKey: 'outputs/other/file' }),
     ).rejects.toThrow();
     expect(storage.head).not.toHaveBeenCalled();
+  });
+
+  it('rejects a completion claiming a preview key of another file', async () => {
+    const batch = await seedBatch(1);
+    const event = completedEvent(batch.id, batch.files[0].id);
+
+    await expect(
+      processor.apply({
+        ...event,
+        previewObjectKey: 'outputs/other/file/1/preview',
+      }),
+    ).rejects.toThrow();
+    expect(storage.head).not.toHaveBeenCalled();
+    expect((await fileStatus(batch.files[0].id)).status).toBe(
+      ConversionFileStatus.QUEUED,
+    );
   });
 
   it('marks the batch FAILED when every file failed', async () => {

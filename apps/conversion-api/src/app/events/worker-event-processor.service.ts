@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   outputObjectKey,
+  previewObjectKey,
   type WorkerResultEvent,
   type WorkerStartedEvent,
 } from '@pixaeron/conversion-contract';
@@ -102,6 +103,15 @@ export class WorkerEventProcessorService {
         `Output key ${event.outputObjectKey} does not belong to file ${event.fileId}`,
       );
     }
+    if (
+      event.previewObjectKey !== null &&
+      event.previewObjectKey !==
+        previewObjectKey(event.batchId, event.fileId, event.attempt)
+    ) {
+      throw new Error(
+        `Preview key ${event.previewObjectKey} does not belong to file ${event.fileId}`,
+      );
+    }
 
     const stored = await this.storage.head(event.outputObjectKey);
     if (!stored) {
@@ -127,6 +137,7 @@ export class WorkerEventProcessorService {
       status: ConversionFileStatus.COMPLETED,
       resultKind: event.resultKind,
       outputObjectKey: event.outputObjectKey,
+      previewObjectKey: event.previewObjectKey,
       outputBytes: event.outputBytes,
       outputChecksum: event.outputChecksumSha256,
       inputFormat: event.inputFormat,
