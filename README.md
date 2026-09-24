@@ -1,7 +1,7 @@
 # pixaeron-converter-app\_\_backend
 
 Backend Nx workspace for the Pixaeron image conversion application. It contains
-three deployable services and the libraries they share:
+five deployable services and the libraries they share:
 
 - `apps/auth` — Federation 2 Identity/Auth subgraph: registration, email
   verification, password recovery, Google sign-in, cookie sessions and session
@@ -9,6 +9,11 @@ three deployable services and the libraries they share:
 - `apps/notifications` — private transactional-email service: gRPC command
   contract, Amazon SES delivery, SES feedback ingestion, suppression and
   retention. It has no public GraphQL surface and no host port;
+- `apps/conversion-api` — Federation 2 conversion subgraph: batch admission,
+  presigned S3 uploads, quotas and storage windows, the outbox that feeds SQS
+  and the consumer of worker events;
+- `apps/conversion-worker` — SQS consumer that compresses the uploaded images
+  with sharp, writes the results and their previews to S3 and reports back;
 - `apps/gateway` — Apollo Router with a statically composed supergraph, the only
   service reachable from the public internet.
 
@@ -25,13 +30,20 @@ Use Node.js 24 for parity with CI.
 npm ci
 npx nx run auth:prisma-generate
 npx nx run notifications:prisma-generate
+npx nx run conversion-api:prisma-generate
 npm run docker:start
 ```
 
 `docker-compose.yaml` is the local stack; `docker-compose.production.yaml` is the
 deployed model and is not meant to be run by hand. Local Compose publishes
-Gateway on `127.0.0.1:4000` and Auth on `127.0.0.1:3001`; Notifications is
-reachable only over the internal command network.
+Gateway on `127.0.0.1:4000` and Auth on `127.0.0.1:3001`; Notifications and
+conversion-api are reachable only inside the Compose network, the latter
+through the router. Conversion-api and the conversion worker read `apps/conversion-api/.env`
+and `apps/conversion-worker/.env`, whose `SQS_QUEUE_SUFFIX=-dev` and
+`CONVERSION_S3_BUCKET` select the dev queue copies and the dev bucket, so a local
+compression is a real round trip through SQS and S3.
+The gateway composes the supergraph from the committed subgraph schemas at build
+time, so rebuild it after a schema change: `docker compose up -d --build gateway`.
 
 ## Verification
 

@@ -140,6 +140,76 @@ services:
       notifications_data:
       notifications_egress:
 
+  conversion-api:
+    build:
+      context: .
+      dockerfile: apps/conversion-api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - apps/conversion-api/.env
+    environment:
+      NODE_ENV: development
+      PORT: 3005
+      DATABASE_URL: postgresql://conversion:conversion@conversion-postgres:5432/pixaeron_conversion?schema=public
+      REDIS_URL: redis://redis:6379
+      ENTITLEMENTS_GRPC_URL: auth:50053
+      ENTITLEMENTS_GRPC_DEADLINE_MS: 2000
+    command: >-
+      sh -c "./node_modules/.bin/prisma migrate deploy
+      --config apps/conversion-api/prisma.config.ts && node main.js"
+    depends_on:
+      conversion-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3005/conversion/health/ready').then((response) => {
+            if (!response.ok) process.exit(1);
+          }).catch(() => process.exit(1));
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - default
+      - conversion_data
+
+  conversion-worker:
+    build:
+      context: .
+      dockerfile: apps/conversion-worker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - apps/conversion-worker/.env
+    environment:
+      NODE_ENV: development
+      WORKER_PROGRESS_FILE: /tmp/pixaeron-worker-progress
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=256m
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const { statSync } = require('node:fs');
+          const age = Date.now() - statSync(process.env.WORKER_PROGRESS_FILE).mtimeMs;
+          if (age > 120000) process.exit(1);
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - default
+
   gateway:
     build:
       context: .
@@ -152,6 +222,8 @@ services:
       - '127.0.0.1:4000:4000'
     depends_on:
       auth:
+        condition: service_healthy
+      conversion-api:
         condition: service_healthy
     healthcheck:
       test:

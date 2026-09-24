@@ -33,6 +33,10 @@ import { isUniqueConstraintError } from '../prisma/prisma.support';
 
 const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+const RECEIVED_FILE_STATUSES = LIVE_FILE_STATUSES.filter(
+  (status) => status !== ConversionFileStatus.UPLOADING,
+);
+
 const RETENTION_CLASS_BY_HOURS: Record<number, ConversionRetentionClass> = {
   1: 'short',
   48: 'standard',
@@ -429,12 +433,12 @@ export class AdmissionService {
     items: Array<ConversionBatch & { files: ConversionFile[] }>;
     total: number;
   }> {
-    const live = { status: { in: LIVE_FILE_STATUSES } };
-    const listed = { subject, files: { some: live } };
+    const received = { status: { in: RECEIVED_FILE_STATUSES } };
+    const listed = { subject, files: { some: received } };
     const [items, total] = await Promise.all([
       this.prisma.conversionBatch.findMany({
         where: listed,
-        include: { files: { where: live, orderBy: { id: 'asc' } } },
+        include: { files: { where: received, orderBy: { id: 'asc' } } },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
@@ -451,7 +455,7 @@ export class AdmissionService {
     offset: number,
   ): Promise<{ items: ConversionFile[]; total: number }> {
     const listed = {
-      status: { in: LIVE_FILE_STATUSES },
+      status: { in: RECEIVED_FILE_STATUSES },
       batch: { subject },
     };
     const [items, total] = await Promise.all([
