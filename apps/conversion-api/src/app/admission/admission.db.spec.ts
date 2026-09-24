@@ -658,10 +658,10 @@ describe('AdmissionService on Postgres', () => {
     expect(file.status).toBe(ConversionFileStatus.READY);
   });
 
-  it('lists only live files and hides batches with nothing left to show', async () => {
+  it('lists only received live files and hides batches with nothing left to show', async () => {
     const subject = `user:${randomUUID()}`;
     subjects.push(subject);
-    const living = await readyBatch(subject, proSnapshot, 2);
+    const living = await readyBatch(subject, proSnapshot, 3);
     const dead = await readyBatch(subject, proSnapshot, 1);
     await prisma.conversionFile.update({
       where: { id: living.files[0].id },
@@ -670,6 +670,10 @@ describe('AdmissionService on Postgres', () => {
     await prisma.conversionFile.update({
       where: { id: living.files[1].id },
       data: { status: ConversionFileStatus.EXPIRED },
+    });
+    await prisma.conversionFile.update({
+      where: { id: living.files[2].id },
+      data: { status: ConversionFileStatus.UPLOADING },
     });
     await prisma.conversionFile.updateMany({
       where: { batchId: dead.batch.id },
@@ -716,11 +720,11 @@ describe('AdmissionService on Postgres', () => {
     expect(secondPage.items).toHaveLength(1);
   });
 
-  it('lists only the live files of the subject', async () => {
+  it('lists only the live files the server has received from the subject', async () => {
     const subject = `user:${randomUUID()}`;
     const stranger = `user:${randomUUID()}`;
     subjects.push(subject, stranger);
-    const own = await readyBatch(subject, proSnapshot, 2);
+    const own = await readyBatch(subject, proSnapshot, 3);
     await readyBatch(stranger, proSnapshot, 1);
     await prisma.conversionFile.update({
       where: { id: own.files[0].id },
@@ -729,6 +733,10 @@ describe('AdmissionService on Postgres', () => {
     await prisma.conversionFile.update({
       where: { id: own.files[1].id },
       data: { status: ConversionFileStatus.COMPLETED },
+    });
+    await prisma.conversionFile.update({
+      where: { id: own.files[2].id },
+      data: { status: ConversionFileStatus.UPLOADING },
     });
 
     const page = await service.listFiles(subject, 10, 0);
